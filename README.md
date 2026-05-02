@@ -1,28 +1,138 @@
 # Yora
 
-Yora is a time-locked encrypted capsule dApp for Aptos and Shelby.
+**Yora is a time-locked encrypted capsule dApp for Aptos and Shelby.**
 
-Users can seal private messages or files, encrypt them locally in the browser, write encrypted capsule blobs to Shelby, and let the recipient wallet unseal them after the selected unlock time.
+Yora lets users seal private messages or files, encrypt payloads locally in the browser, write encrypted capsule blobs to Shelby decentralized hot storage, and let the intended recipient wallet unseal the capsule after the selected unlock time.
 
-## Features
+[![Live App](https://img.shields.io/badge/Live%20App-yora--nine.vercel.app-2b1b0f?style=for-the-badge)](https://yora-nine.vercel.app)
+[![React](https://img.shields.io/badge/React-18-2b1b0f?style=for-the-badge&logo=react)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-2b1b0f?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
+[![Shelby](https://img.shields.io/badge/Shelby-Storage-2b1b0f?style=for-the-badge)](https://docs.shelby.xyz/)
+[![Aptos](https://img.shields.io/badge/Aptos-Wallets-2b1b0f?style=for-the-badge)](https://aptos.dev/)
 
-- Local AES-GCM encryption before storage
-- Shelby encrypted blob writes
-- Shelbynet and Shelby Testnet route toggle
-- Aptos wallet connection through the wallet adapter
+## Preview
+
+### Landing Page
+
+![Yora landing page](docs/assets/yora-landing.png)
+
+### Vault Dashboard
+
+![Yora dashboard](docs/assets/yora-dashboard.png)
+
+### Capsule Composer
+
+![Yora create capsule page](docs/assets/yora-create.png)
+
+## What Yora Does
+
+Yora is designed around one simple primitive: **a private capsule that should only become readable by a specific wallet after a specific time.**
+
+The dApp currently supports:
+
+- Message capsules
+- File capsules
+- Local AES-GCM payload encryption
+- Shelby blob writes
+- Shelbynet Devnet and Shelby Testnet route switching
+- Aptos wallet connection
 - Recipient-based capsule discovery
 - Sent and received capsule views
-- Shelby explorer links for outgoing writes
-- Clean, responsive Web3 interface
+- Unlock-time checks
+- Shelby explorer links for outgoing blob writes
+- Production-style UI with responsive layout and motion polish
+
+## Current Product Status
+
+| Area | Status | Notes |
+| --- | --- | --- |
+| Local encryption | Implemented | Payloads are encrypted before storage. |
+| Shelby blob storage | Implemented | New capsules are written as encrypted Shelby blobs. |
+| Shelbynet route | Implemented | Uses the Shelbynet Shelby blob endpoint and API key. |
+| Shelby Testnet route | Implemented | Uses the Shelby Testnet blob endpoint and API key. |
+| Aptos wallet connection | Implemented | Uses the Aptos wallet adapter. |
+| Recipient discovery | Implemented | Yora indexes Shelby capsule envelopes addressed to the connected wallet. |
+| Sent / received separation | Implemented | Capsule cards identify inbound and outbound capsules. |
+| Explorer links | Implemented | Outgoing writes link to the Shelby explorer. |
+| Production key release | Planned | See [Phase 4 key release](docs/PHASE_4_KEY_RELEASE.md). |
+| Aptos Move registry | Planned | Recommended for stronger production guarantees. |
+
+## How It Works
+
+```mermaid
+flowchart LR
+  Sender[Sender wallet] --> Compose[Create capsule]
+  Compose --> Encrypt[Encrypt payload locally]
+  Encrypt --> Envelope[Build Yora capsule envelope]
+  Envelope --> Shelby[Write encrypted blob to Shelby]
+  Shelby --> Index[Discover via Shelby index]
+  Index --> Recipient[Recipient wallet]
+  Recipient --> Check{Unlock time reached?}
+  Check -- No --> Locked[Keep capsule locked]
+  Check -- Yes --> Approval[Recipient wallet approval]
+  Approval --> Release[Release decrypt key]
+  Release --> Decrypt[Decrypt locally]
+  Decrypt --> Open[Open message or file]
+```
+
+## Architecture
+
+```mermaid
+flowchart TB
+  subgraph Browser
+    UI[React + TypeScript UI]
+    Crypto[Web Crypto AES-GCM]
+    Wallet[Aptos Wallet Adapter]
+    Runtime[Yora capsule runtime]
+  end
+
+  subgraph Shelby
+    Blob[Shelby encrypted blob storage]
+    Indexer[Shelby blob index]
+  end
+
+  subgraph FutureHardening[Planned production hardening]
+    KeyService[Key-release service]
+    Registry[Aptos Move registry]
+  end
+
+  UI --> Runtime
+  Runtime --> Crypto
+  Runtime --> Wallet
+  Runtime --> Blob
+  Blob --> Indexer
+  Indexer --> Runtime
+  Runtime -. Phase 4 .-> KeyService
+  KeyService -. verifies .-> Registry
+```
+
+## Capsule Lifecycle
+
+1. **Compose**
+   The sender enters a capsule name, recipient wallet address, unlock time, and either a message or file.
+
+2. **Encrypt**
+   Yora encrypts the payload locally with AES-GCM before storage.
+
+3. **Store**
+   Yora writes a capsule envelope containing encrypted payload metadata and ciphertext to the selected Shelby network.
+
+4. **Discover**
+   The recipient wallet can discover capsules addressed to it through the Shelby index.
+
+5. **Unseal**
+   After the unlock time, the recipient wallet approves the unseal flow and Yora decrypts the Shelby blob locally.
 
 ## Network Support
 
-Yora supports:
+Yora supports two Shelby routes:
 
-- Shelbynet Devnet
-- Shelby Testnet
+| Route | Purpose |
+| --- | --- |
+| Shelbynet Devnet | Developer route for Shelbynet testing. |
+| Shelby Testnet | Public Shelby test environment. |
 
-Each route uses its own Shelby API key and blob endpoint through environment variables.
+The selected route controls the Shelby client, blob endpoint, and displayed network state.
 
 ## Environment Variables
 
@@ -37,9 +147,11 @@ VITE_SHELBYNET_API_KEY=
 VITE_SHELBY_TESTNET_API_KEY=
 ```
 
-Never commit `.env` or real API keys. The project `.gitignore` keeps local environment files out of Git.
+Do not commit `.env` or real API keys. The repository ignores local environment files.
 
-## Development
+> Important: Vite exposes `VITE_` variables to the browser bundle. If Shelby API keys must be treated as private secrets, move Shelby writes behind a backend/proxy before mainnet-grade production use.
+
+## Local Development
 
 ```bash
 npm install
@@ -56,12 +168,53 @@ npm run build
 
 The compiled app is generated in `dist/`.
 
-## Security Notes
+## Deployment
 
-- Yora writes encrypted payloads to Shelby, not plaintext content.
-- If Shelby rejects a blob write, the capsule is not created.
-- API keys must be supplied through deployment environment variables.
-- The current key-release path is documented in `docs/PHASE_4_KEY_RELEASE.md` for the next production hardening phase.
+Yora is deployed on Vercel:
+
+```text
+https://yora-nine.vercel.app
+```
+
+For Vercel deployments, configure the same environment variables from `.env.example` in the Vercel project settings.
+
+## Security Model
+
+Yora currently provides:
+
+- Local payload encryption before storage
+- Encrypted-only Shelby blob writes
+- Recipient address filtering for capsule discovery
+- Unlock-time checks before unseal
+- Wallet approval before decrypt flow
+- No local capsule fallback when Shelby writes fail
+
+Yora does **not** yet provide:
+
+- Fully decentralized key release
+- Aptos Move contract registry for capsule state
+- Threshold encryption or decentralized key management
+- Mainnet-grade key custody
+
+The recommended hardening path is documented in [Phase 4 key release](docs/PHASE_4_KEY_RELEASE.md).
+
+## Repository Structure
+
+```text
+src/
+  App.tsx                 Main application shell and dApp flows
+  styles.css              Product UI, responsive layout, and animations
+  lib/
+    crypto.ts             AES-GCM encryption and decryption helpers
+    shelby.ts             Shelby route configuration
+    shelbyCapsules.ts     Capsule envelope encoding and Shelby discovery
+    keyRelease.ts         Current development key-release adapter
+    storage.ts            Shelby blob reading
+    address.ts            Address normalization helpers
+docs/
+  PHASE_4_KEY_RELEASE.md  Production key-release plan
+  assets/                 README screenshots
+```
 
 ## Tech Stack
 
@@ -70,3 +223,17 @@ The compiled app is generated in `dist/`.
 - Vite
 - Aptos Wallet Adapter
 - Shelby Protocol SDK
+- Shelby React SDK
+- Web Crypto API
+
+## Roadmap
+
+- Replace the development key-release adapter with a production key-release service.
+- Add an Aptos Move registry for capsule metadata, digest, recipient, unlock time, and blob pointer.
+- Add automated tests for wallet switching, recipient discovery, and network route behavior.
+- Add server-side or contract-backed verification for production unseal guarantees.
+- Improve bundle splitting around Aptos wallet dependencies.
+
+## License
+
+This repository is currently published for Yora development and community review. Add a license before wider reuse or external contribution.
