@@ -29,7 +29,7 @@ Each route uses its own Shelby API key and blob endpoint through environment var
 Copy `.env.example` to `.env` for local development.
 
 ```bash
-VITE_NORA_NETWORK=testnet
+VITE_YORA_NETWORK=testnet
 VITE_APTOS_API_KEY=
 VITE_SHELBYNET_APTOS_API_KEY=
 VITE_SHELBY_API_KEY=

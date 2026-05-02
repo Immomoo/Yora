@@ -34,7 +34,7 @@ export const SHELBY_NETWORKS: Record<ShelbyNetworkId, ShelbyNetworkConfig> = {
 };
 
 export const DEFAULT_SHELBY_NETWORK: ShelbyNetworkId =
-  import.meta.env.VITE_NORA_NETWORK === "shelbynet" ? "shelbynet" : "testnet";
+  (import.meta.env.VITE_YORA_NETWORK ?? import.meta.env.VITE_NORA_NETWORK) === "shelbynet" ? "shelbynet" : "testnet";
 
 export function createShelbyClient(network: ShelbyNetworkId): ShelbyClient {
   const config = SHELBY_NETWORKS[network];

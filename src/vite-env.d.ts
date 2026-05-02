@@ -6,6 +6,7 @@ interface ImportMetaEnv {
   readonly VITE_SHELBY_API_KEY?: string;
   readonly VITE_SHELBYNET_API_KEY?: string;
   readonly VITE_SHELBY_TESTNET_API_KEY?: string;
+  readonly VITE_YORA_NETWORK?: "testnet" | "shelbynet";
   readonly VITE_NORA_NETWORK?: "testnet" | "shelbynet";
 }
 
