@@ -9,3 +9,5 @@ vite.err.log
 .env
 .env.*
 !.env.example
+
+.vercel
