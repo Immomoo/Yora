@@ -1,0 +1,1339 @@
+import { useEffect, useMemo, useState } from "react";
+import { useWallet } from "@aptos-labs/wallet-adapter-react";
+import { useUploadBlobs } from "@shelby-protocol/react";
+import {
+  Archive,
+  ArrowDownToLine,
+  BarChart3,
+  CalendarClock,
+  Check,
+  Clock3,
+  Copy,
+  CornerDownLeft,
+  CornerUpRight,
+  FileLock2,
+  Fingerprint,
+  Gauge,
+  History,
+  KeyRound,
+  Layers3,
+  LogOut,
+  ExternalLink,
+  Plus,
+  RefreshCw,
+  Send,
+  Server,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  Upload,
+  UserRound,
+  Wallet,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import type { CapsuleDraft, CapsuleManifest, ShelbyNetworkId } from "./types";
+import { formatAddress, formatBytes } from "./lib/bytes";
+import { encryptDraft, decryptPayload } from "./lib/crypto";
+import { escrowKey, releaseKey } from "./lib/keyRelease";
+import { readBlob } from "./lib/storage";
+import { createShelbyClient, shelbyBlobUrl, SHELBY_NETWORKS } from "./lib/shelby";
+import { capsuleBlobName, discoverShelbyCapsules, encodeCapsuleEnvelope } from "./lib/shelbyCapsules";
+import { comparableAddress, sameAddress } from "./lib/address";
+
+const DEFAULT_UNLOCK = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
+const SHELBY_EXPLORER_BASE_URL = "https://explorer.shelby.xyz";
+const RUNTIME_VERSION = "shelby-index-v3";
+
+type Page = "landing" | "dashboard" | "create" | "capsules" | "transactions" | "profile";
+type SealStep = "idle" | "encrypting" | "approving" | "uploading" | "escrow" | "sealed" | "error";
+
+interface AppProps {
+  selectedNetwork: ShelbyNetworkId;
+  onNetworkChange: (network: ShelbyNetworkId) => void;
+}
+
+function normalizedAddress(address?: unknown): string {
+  if (!address) return "";
+  return String(address);
+}
+
+function bytesToBlobPart(bytes: Uint8Array): BlobPart {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+function toDateTimeLocal(timestamp: number): string {
+  const date = new Date(timestamp);
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
+}
+
+function formatCapsuleStorage(capsule: CapsuleManifest): string {
+  return capsule.shelbyNetwork ? SHELBY_NETWORKS[capsule.shelbyNetwork].shortLabel : "Shelby";
+}
+
+function capsuleCountLabel(count: number): string {
+  return `${count} ${count === 1 ? "capsule" : "capsules"}`;
+}
+
+function shelbyExplorerBlobUrl(capsule: CapsuleManifest): string {
+  const network = capsule.shelbyNetwork ?? "testnet";
+  return `${SHELBY_EXPLORER_BASE_URL}/${network}/blobs/${capsule.creator}?blobName=${encodeURIComponent(capsule.blobName)}`;
+}
+
+function isWalletOnSelectedNetwork(walletNetworkName: string, selectedNetwork: ShelbyNetworkId): boolean {
+  const normalized = walletNetworkName.toLowerCase();
+  if (!normalized) return true;
+  if (selectedNetwork === "shelbynet") {
+    return normalized.includes("shelby") || normalized.includes("custom");
+  }
+  return normalized.includes("testnet");
+}
+
+function shortDigest(value: string): string {
+  return value.length > 18 ? `${value.slice(0, 10)}...${value.slice(-6)}` : value;
+}
+
+function YoraMotionMark() {
+  // Shelby Protocol logo — verified from official brand mark.
+  // 3 identical pieces, each a wide chevron with:
+  //   • outer edge following a large arc (R≈196, center 256,256)
+  //   • inner concave notch on the left (pointing toward hub)
+  //   • two straight angled sides connecting inner notch to outer arc endpoints
+  // One piece in "right" orientation; rotate(120) and rotate(240) give the other two.
+  //
+  // Outer arc: from (256+196·cos(−55°), 256+196·sin(−55°)) to same angle +110°
+  //   cos/sin here use standard SVG coords (y-axis down)
+  //   −55°: (256+196·cos55°, 256−196·sin55°) = (256+112, 256−161) = (368, 95)  [top-right]
+  //   +55°: (256+196·cos55°, 256+196·sin55°) = (368, 417)                      [bot-right]
+  //   rightmost (0°): (256+196, 256) = (452, 256)
+  //
+  // Inner notch tip: (256−80, 256) = (176, 256) — sharp V toward center
+  // Inner arc endpoints (shoulders):
+  //   top shoulder: (176+90·cos(−40°), 256+90·sin(−40°)) ≈ (245, 198)
+  //   bot shoulder: (245, 314)
+  const blade =
+    "M 176,256" +               // inner tip (V-point toward center)
+    " L 250,190" +              // upper shoulder
+    " L 368,95" +               // outer arc start (upper)
+    " A 196,196 0 0,1 452,256" +// outer arc: top → right peak
+    " A 196,196 0 0,1 368,417" +// outer arc: right peak → bottom
+    " L 250,322" +              // lower shoulder
+    " Z";
+  return (
+    <div className="yora-motion" aria-label="Yora">
+      <svg viewBox="0 0 272 220" role="img">
+        <title>Yora</title>
+        <g className="yora-motion-mark">
+          <rect className="yora-motion-frame" x="66" y="26" width="140" height="168" rx="28" />
+          <path className="yora-motion-glyph" d="M94 42h18l24 55 24-55h18l-34 76v44h-16v-44L94 42Z" />
+          <circle className="yora-motion-dot" cx="178" cy="49" r="9" />
+        </g>
+      </svg>
+      <span className="yora-ring one" />
+      <span className="yora-ring two" />
+    </div>
+  );
+}
+
+export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
+  const wallet = useWallet();
+  const [activePage, setActivePage] = useState<Page>("landing");
+  const [capsules, setCapsules] = useState<CapsuleManifest[]>([]);
+  const [draft, setDraft] = useState<CapsuleDraft>({
+    title: "For the morning after launch",
+    recipient: "",
+    unlockAt: new Date(DEFAULT_UNLOCK).getTime(),
+    message: "Write a private note that should only be opened after the unlock time.",
+    file: null,
+  });
+  const [mode, setMode] = useState<"message" | "file">("message");
+  const [activity, setActivity] = useState("Ready to write an encrypted capsule to Shelby.");
+  const [opened, setOpened] = useState<{ title: string; text?: string; url?: string } | null>(null);
+  const [selectedCapsule, setSelectedCapsule] = useState<CapsuleManifest | null>(null);
+  const [sealStep, setSealStep] = useState<SealStep>("idle");
+  const [walletPickerOpen, setWalletPickerOpen] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
+  const [openingCapsuleId, setOpeningCapsuleId] = useState<string | null>(null);
+  const [isIndexLoading, setIsIndexLoading] = useState(false);
+  const [indexError, setIndexError] = useState<string | null>(null);
+  const [capsuleScope, setCapsuleScope] = useState("");
+  const [indexStatus, setIndexStatus] = useState("Shelby capsule index ready.");
+
+  const connectedAddress = normalizedAddress(wallet.account?.address);
+  const currentScope = `${selectedNetwork}:${comparableAddress(connectedAddress)}`;
+  const scopedCapsules = capsuleScope === currentScope ? capsules : [];
+  const visibleCapsules = useMemo(
+    () =>
+      connectedAddress
+        ? scopedCapsules.filter(
+            (capsule) =>
+              capsule.shelbyNetwork === selectedNetwork &&
+              (sameAddress(capsule.creator, connectedAddress) ||
+                sameAddress(capsule.recipient, connectedAddress)),
+          )
+        : [],
+    [scopedCapsules, connectedAddress, selectedNetwork],
+  );
+  const receivedCapsules = useMemo(
+    () => visibleCapsules.filter((capsule) => sameAddress(capsule.recipient, connectedAddress)),
+    [visibleCapsules, connectedAddress],
+  );
+  const transactionCapsules = useMemo(
+    () => visibleCapsules.filter((capsule) => sameAddress(capsule.creator, connectedAddress)),
+    [visibleCapsules, connectedAddress],
+  );
+  const receivedCount = receivedCapsules.length;
+  const sentCount = transactionCapsules.length;
+  const sealedCount = visibleCapsules.length;
+  const totalBytes = visibleCapsules.reduce((sum, capsule) => sum + capsule.sizeBytes, 0);
+  const openedCount = visibleCapsules.filter((capsule) => capsule.status === "opened").length;
+  const lockedCount = visibleCapsules.filter((capsule) => Date.now() < capsule.unlockAt).length;
+  const receivedInbox = [...receivedCapsules].sort((a, b) => b.createdAt - a.createdAt).slice(0, 4);
+  const networkConfig = SHELBY_NETWORKS[selectedNetwork];
+  const shelbyClient = useMemo(() => createShelbyClient(selectedNetwork), [selectedNetwork]);
+  const detectedWallets = wallet.wallets;
+  const suggestedWallets = wallet.notDetectedWallets.slice(0, 5);
+  const walletNetworkName = wallet.network?.name ? String(wallet.network.name) : "";
+  const networkMismatch =
+    wallet.connected &&
+    Boolean(walletNetworkName) &&
+    !isWalletOnSelectedNetwork(walletNetworkName, selectedNetwork);
+
+  const uploadBlobs = useUploadBlobs({
+    client: shelbyClient,
+    onError: (error) => setActivity(`Shelby rejected the blob write: ${error.message}`),
+  });
+  const isBusy = uploadBlobs.isPending || sealStep === "encrypting" || sealStep === "approving" || sealStep === "uploading" || sealStep === "escrow";
+
+  useEffect(() => {
+    localStorage.removeItem("yora:capsules:v1");
+    localStorage.removeItem("nora:capsules:v1");
+  }, []);
+
+  useEffect(() => {
+    const normalizedNetwork = walletNetworkName.toLowerCase();
+    if (!wallet.connected || !normalizedNetwork) return;
+
+    if ((normalizedNetwork.includes("shelby") || normalizedNetwork.includes("custom")) && selectedNetwork !== "shelbynet") {
+      onNetworkChange("shelbynet");
+      setActivity("Yora matched the connected wallet to Shelbynet.");
+      return;
+    }
+
+    if (normalizedNetwork.includes("testnet") && !normalizedNetwork.includes("shelby") && selectedNetwork !== "testnet") {
+      onNetworkChange("testnet");
+      setActivity("Yora matched the connected wallet to Shelby Testnet.");
+    }
+  }, [wallet.connected, walletNetworkName, selectedNetwork, onNetworkChange]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadFromShelby() {
+      if (!connectedAddress) {
+        setCapsules([]);
+        setCapsuleScope(currentScope);
+        setIndexError(null);
+        setIndexStatus("Connect a wallet to load its Shelby capsules.");
+        return;
+      }
+
+      setIsIndexLoading(true);
+      setCapsules([]);
+      setCapsuleScope(currentScope);
+      setIndexError(null);
+      setIndexStatus(`Loading Shelby capsules for ${formatAddress(connectedAddress)} on ${SHELBY_NETWORKS[selectedNetwork].shortLabel}...`);
+      try {
+        const indexedCapsules = await discoverShelbyCapsules({
+          client: shelbyClient,
+          account: connectedAddress,
+          network: selectedNetwork,
+        });
+        if (!cancelled) {
+          setCapsuleScope(currentScope);
+          setCapsules(indexedCapsules);
+          setIndexStatus(`Loaded ${capsuleCountLabel(indexedCapsules.length)} from Shelby for ${formatAddress(connectedAddress)}.`);
+          setActivity(`Loaded ${capsuleCountLabel(indexedCapsules.length)} from Shelby for this wallet.`);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCapsules([]);
+          setCapsuleScope(currentScope);
+          setIndexError(error instanceof Error ? error.message : "Yora could not load capsules from Shelby.");
+          setIndexStatus("Shelby capsule load failed.");
+        }
+      } finally {
+        if (!cancelled) setIsIndexLoading(false);
+      }
+    }
+
+    void loadFromShelby();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connectedAddress, selectedNetwork, shelbyClient, currentScope]);
+
+  const readyCount = useMemo(
+    () =>
+      receivedCapsules.filter(
+        (capsule) =>
+          sameAddress(capsule.recipient, connectedAddress) &&
+          Date.now() >= capsule.unlockAt,
+      ).length,
+    [receivedCapsules, connectedAddress],
+  );
+
+  async function sealCapsule() {
+    setLastError(null);
+    if (!connectedAddress || !wallet.signAndSubmitTransaction) {
+      setActivity("Connect an Aptos wallet before sealing.");
+      setLastError("Connect a wallet so Yora can sign the Shelby blob write.");
+      setSealStep("error");
+      return;
+    }
+    if (networkMismatch) {
+      setActivity(`Switch your wallet to ${networkConfig.shortLabel} before sealing.`);
+      setLastError(`Your wallet is on ${walletNetworkName}. Switch it to ${networkConfig.shortLabel}, or choose the matching Yora route.`);
+      setSealStep("error");
+      return;
+    }
+    if (!draft.recipient || !draft.title || (!draft.message && !draft.file)) {
+      setActivity("Complete the capsule details before sealing.");
+      setLastError("Add a title, recipient address, unlock time, and either a message or a file.");
+      setSealStep("error");
+      return;
+    }
+    if (draft.unlockAt <= Date.now()) {
+      setActivity("Choose a future unlock time.");
+      setLastError("The unlock time must be later than the current time.");
+      setSealStep("error");
+      return;
+    }
+
+    setSealStep("encrypting");
+    setActivity("Encrypting the payload locally...");
+    const encrypted = await encryptDraft({ ...draft, file: mode === "file" ? draft.file : null });
+    const id = crypto.randomUUID();
+    const normalizedRecipient = comparableAddress(draft.recipient);
+    const blobName = capsuleBlobName({ recipient: normalizedRecipient, id });
+    const keyId = `key_${id}`;
+    const blobUrl = shelbyBlobUrl(connectedAddress, blobName, selectedNetwork);
+    const manifest: CapsuleManifest = {
+      id,
+      title: draft.title,
+      creator: connectedAddress,
+      recipient: normalizedRecipient,
+      unlockAt: draft.unlockAt,
+      createdAt: Date.now(),
+      payloadKind: encrypted.payloadKind,
+      blobName,
+      blobUrl,
+      storage: "shelby",
+      sizeBytes: encrypted.sizeBytes,
+      mimeType: encrypted.mimeType,
+      iv: Array.from(encrypted.iv).join(","),
+      keyId,
+      ciphertextDigest: encrypted.digest,
+      status: "sealed",
+      shelbyNetwork: selectedNetwork,
+    };
+
+    try {
+      setSealStep("approving");
+      setActivity("Approve the Shelby blob write in your wallet...");
+      await uploadBlobs.mutateAsync({
+        signer: { account: connectedAddress, signAndSubmitTransaction: wallet.signAndSubmitTransaction },
+        blobs: [{ blobName, blobData: encodeCapsuleEnvelope(manifest, encrypted) }],
+        expirationMicros: draft.unlockAt * 1000 + 90 * 24 * 60 * 60 * 1000 * 1000,
+      });
+      setSealStep("uploading");
+      setActivity("Shelby accepted the encrypted blob.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Shelby did not accept the blob write. No capsule was created.";
+      setSealStep("error");
+      setLastError(message);
+      setActivity(`Shelby write failed: ${message}`);
+      return;
+    }
+
+    setSealStep("escrow");
+    await escrowKey({
+      keyId,
+      recipient: draft.recipient,
+      unlockAt: draft.unlockAt,
+      keyBytes: encrypted.keyBytes,
+    });
+    setCapsuleScope(currentScope);
+    setCapsules((current) => [manifest, ...current.filter((capsule) => capsule.id !== manifest.id)]);
+    setActivePage("capsules");
+    setSelectedCapsule(manifest);
+    setSealStep("sealed");
+    setActivity("Capsule sealed and written to Shelby.");
+  }
+
+  async function unsealCapsule(capsule: CapsuleManifest) {
+    if (!connectedAddress) {
+      setActivity("Connect the recipient wallet to unseal this capsule.");
+      setLastError("Only the recipient wallet can approve and decrypt this capsule.");
+      return;
+    }
+    try {
+      setLastError(null);
+      setOpeningCapsuleId(capsule.id);
+      setActivity("Requesting recipient wallet approval...");
+      await wallet.signMessage({
+        message: `Unseal Yora capsule: ${capsule.title}\nCapsule ID: ${capsule.id}\nDigest: ${capsule.ciphertextDigest}`,
+        nonce: crypto.randomUUID(),
+        address: true,
+        application: true,
+        chainId: true,
+      });
+      setActivity("Checking recipient, unlock time, and Shelby blob...");
+      const key = await releaseKey({
+        keyId: capsule.keyId,
+        recipient: connectedAddress,
+      });
+      const ciphertext = await readBlob(capsule);
+      const plaintext = await decryptPayload(ciphertext, key, new Uint8Array(capsule.iv.split(",").map(Number)));
+
+      if (capsule.payloadKind === "message") {
+        setOpened({ title: capsule.title, text: new TextDecoder().decode(plaintext) });
+      } else {
+        const blob = new Blob([bytesToBlobPart(plaintext)], { type: capsule.mimeType });
+        setOpened({ title: capsule.title, url: URL.createObjectURL(blob) });
+      }
+      setCapsules((current) =>
+        current.map((item) => (item.id === capsule.id ? { ...item, status: "opened" } : item)),
+      );
+      setActivity("Capsule unsealed after recipient approval.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "This capsule is not ready to unseal.";
+      setLastError(message);
+      setActivity(message);
+    } finally {
+      setOpeningCapsuleId(null);
+    }
+  }
+
+  const appNavItems: Array<[Page, LucideIcon, string]> = [
+    ["dashboard", BarChart3, "Dashboard"],
+    ["create", Plus, "Create"],
+    ["capsules", Archive, "Capsules"],
+    ["transactions", History, "Transactions"],
+    ["profile", UserRound, "Profile"],
+  ];
+
+  const healthItems = [
+    { label: "Aptos", value: networkConfig.shortLabel, tone: wallet.connected ? "good" : "idle" },
+    { label: "Shelby", value: uploadBlobs.isPending ? "Uploading" : networkConfig.shortLabel, tone: uploadBlobs.isPending ? "busy" : "good" },
+    { label: "Blobs", value: "Shelby only", tone: "good" },
+  ];
+
+  const sealSteps: Array<[SealStep, string]> = [
+    ["encrypting", "Encrypt"],
+    ["approving", "Wallet approval"],
+    ["uploading", "Shelby commit"],
+    ["escrow", "Release key"],
+    ["sealed", "Capsule sealed"],
+  ];
+  const activeSealIndex = sealSteps.findIndex(([step]) => step === sealStep);
+
+  const openWalletPicker = () => {
+    if (!detectedWallets.length && !suggestedWallets.length) {
+      setActivity("Install or enable an Aptos wallet, then connect again.");
+      return;
+    }
+    setWalletPickerOpen(true);
+  };
+
+  const connectWallet = (walletName: string) => {
+    try {
+      wallet.connect(walletName);
+      setWalletPickerOpen(false);
+      setActivity(`Connecting ${walletName}...`);
+    } catch (error) {
+      setActivity(error instanceof Error ? error.message : "Yora could not connect to that wallet.");
+    }
+  };
+
+  const switchNetwork = (network: ShelbyNetworkId) => {
+    if (network === selectedNetwork) return;
+    onNetworkChange(network);
+    setActivity(`Switched to ${SHELBY_NETWORKS[network].label}. Reconnect if your wallet asks for confirmation.`);
+    setSealStep("idle");
+  };
+
+  const walletControl = (
+    <div className="wallet-chip">
+      <Wallet size={15} />
+      <span>{formatAddress(connectedAddress)}</span>
+      {wallet.connected ? (
+        <button className="icon-button" onClick={() => wallet.disconnect()} aria-label="Disconnect wallet">
+          <LogOut size={15} />
+        </button>
+      ) : (
+        <button className="small-button" onClick={openWalletPicker}>
+          Connect wallet
+        </button>
+      )}
+    </div>
+  );
+
+  const networkToggle = (
+    <div className="network-toggle" role="group" aria-label="Shelby network">
+      {(["shelbynet", "testnet"] as ShelbyNetworkId[]).map((network) => (
+        <button
+          key={network}
+          type="button"
+          className={network === selectedNetwork ? "active" : ""}
+          onClick={() => switchNetwork(network)}
+        >
+          <span>{SHELBY_NETWORKS[network].shortLabel}</span>
+        </button>
+      ))}
+    </div>
+  );
+
+  const logo = (
+    <div className="logo-lockup">
+      <div className="yora-logo" aria-hidden="true">
+        <span />
+      </div>
+      <div>
+        <strong>Yora</strong>
+        <small>Time-locked capsules</small>
+      </div>
+    </div>
+  );
+
+  const walletPicker = walletPickerOpen ? (
+    <section className="modal-backdrop" onClick={() => setWalletPickerOpen(false)}>
+      <aside className="wallet-modal" aria-label="Select wallet" onClick={(event) => event.stopPropagation()}>
+        <button className="drawer-close" onClick={() => setWalletPickerOpen(false)} aria-label="Close wallet selector">
+          <X size={17} />
+        </button>
+        <div className="section-heading">
+          <Wallet size={22} />
+          <div>
+            <h2>Connect wallet</h2>
+            <p>Select an Aptos wallet available on this device.</p>
+          </div>
+        </div>
+
+        <div className="wallet-list">
+          <div className="wallet-group">
+            <p>Available wallets</p>
+            {detectedWallets.map((availableWallet) => (
+              <button
+                className="wallet-option"
+                key={availableWallet.name}
+                onClick={() => connectWallet(availableWallet.name)}
+              >
+                <img src={availableWallet.icon} alt="" />
+                <span>
+                  <strong>{availableWallet.name}</strong>
+                  <small>{wallet.wallet?.name === availableWallet.name ? "Connected now" : "Ready to connect"}</small>
+                </span>
+                <Check size={16} />
+              </button>
+            ))}
+          </div>
+
+          {!!suggestedWallets.length && (
+            <div className="wallet-group">
+              <p>Install a wallet</p>
+              {suggestedWallets.map((availableWallet) => (
+                <a className="wallet-option muted" key={availableWallet.name} href={availableWallet.url} target="_blank" rel="noreferrer">
+                  <img src={availableWallet.icon} alt="" />
+                  <span>
+                    <strong>{availableWallet.name}</strong>
+                    <small>Install or open</small>
+                  </span>
+                  <ArrowDownToLine size={16} />
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {!detectedWallets.length && (
+          <p className="wallet-help">No Aptos wallet is available. Install or enable one, refresh the page, then connect again.</p>
+        )}
+      </aside>
+    </section>
+  ) : null;
+
+  if (activePage === "landing") {
+    return (
+      <main className="landing-shell">
+        <header className="landing-nav">
+          {logo}
+          <div className="landing-actions">
+            {networkToggle}
+            <button className="ghost-button" onClick={() => setActivePage("dashboard")}>
+              Open app
+            </button>
+            {walletControl}
+          </div>
+        </header>
+
+        <section className="landing-hero">
+          <YoraMotionMark />
+          <p className="hero-badge">
+            <span className="hero-dot" aria-hidden="true" />
+            {networkConfig.label} / encrypted Shelby storage
+          </p>
+          <h1>Private capsules for a specific moment.</h1>
+          <p className="hero-sub">
+            Yora encrypts messages and files locally, writes encrypted blobs to Shelby, and lets the
+            recipient wallet unseal only after the unlock time.
+          </p>
+          <div className="cta-row">
+            <button className="primary" onClick={() => setActivePage("create")}>
+              <Plus size={18} />
+              Create capsule
+            </button>
+            <button className="ghost-button" onClick={() => setActivePage("dashboard")}>
+              <BarChart3 size={16} />
+              View dashboard
+            </button>
+          </div>
+        </section>
+
+        <section className="flow-panel landing-flow">
+          <div>
+            <h3>Seal once. Open only when the rules match.</h3>
+            <p>
+              Yora keeps the trust boundary clear from encryption to unseal.
+            </p>
+          </div>
+          <ol>
+            <li>
+              <strong>Encrypt</strong>
+              <span>The payload is encrypted locally before anything touches storage.</span>
+            </li>
+            <li>
+              <strong>Store</strong>
+              <span>{networkConfig.shortLabel} stores encrypted blobs. If Shelby rejects the write, Yora creates no capsule.</span>
+            </li>
+            <li>
+              <strong>Gate</strong>
+              <span>The recipient wallet and unlock timestamp control access.</span>
+            </li>
+            <li>
+              <strong>Unseal</strong>
+              <span>The capsule opens only after wallet approval and unlock checks pass.</span>
+            </li>
+          </ol>
+        </section>
+
+        <section className="landing-proof" aria-label="Yora guarantees">
+          <article>
+            <span>01</span>
+            <strong>Private by default</strong>
+            <p>Readable content is encrypted before it leaves the device.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <strong>Recipient gated</strong>
+            <p>The recipient address controls unsealing.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <strong>Time locked</strong>
+            <p>Capsules stay sealed until the unlock time.</p>
+          </article>
+        </section>
+        {walletPicker}
+      </main>
+    );
+  }
+
+  return (
+    <main className="app-shell">
+      <header className="app-topbar">
+        <button className="brand-button" onClick={() => setActivePage("landing")} aria-label="Back to landing page">
+          {logo}
+        </button>
+        <div className="topbar-cluster">
+          {networkToggle}
+          <div className="health-strip" aria-label="Network and storage health">
+            {healthItems.map((item) => (
+              <span className={`health-pill ${item.tone}`} key={item.label}>
+                <small>{item.label}</small>
+                {item.value}
+              </span>
+            ))}
+          </div>
+          {walletControl}
+        </div>
+      </header>
+
+      <aside className="sidebar">
+        <p className="nav-label">App</p>
+        <nav className="nav-stack" aria-label="Yora pages">
+          {appNavItems.map(([page, Icon, label]) => (
+            <button
+              key={page}
+              className={activePage === page ? "nav-item active" : "nav-item"}
+              onClick={() => setActivePage(page)}
+            >
+              <Icon size={16} />
+              <span>{label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-footer">
+          <ShieldCheck size={13} />
+          <span>Shelby encrypted</span>
+        </div>
+      </aside>
+
+      <section className="main-stage">
+        {activePage === "dashboard" && (
+          <section className="page-grid dashboard-page">
+            {!wallet.connected && (
+              <section className="wallet-state">
+                <Wallet size={20} />
+                <div>
+                  <strong>Connect a wallet to access your vault.</strong>
+                  <p>Yora shows capsules created by, or addressed to, the active account.</p>
+                </div>
+                <button className="small-button" onClick={openWalletPicker}>
+                  Connect wallet
+                </button>
+              </section>
+            )}
+            {wallet.connected && (isIndexLoading || indexError) && (
+              <section className="wallet-state">
+                {isIndexLoading ? <RefreshCw size={20} /> : <Server size={20} />}
+                <div>
+                  <strong>{isIndexLoading ? "Loading Shelby capsules..." : "Shelby capsules are unavailable."}</strong>
+                  <p>
+                    {isIndexLoading
+                      ? "Yora is reading sent and received capsule envelopes from Shelby."
+                      : indexError}
+                  </p>
+                </div>
+                <button
+                  className="small-button"
+                  onClick={() => {
+                    setCapsules([]);
+                    setCapsuleScope(currentScope);
+                    setIndexError(null);
+                    setIsIndexLoading(true);
+                    setIndexStatus(`Loading Shelby capsules for ${formatAddress(connectedAddress)} on ${networkConfig.shortLabel}...`);
+                    void discoverShelbyCapsules({
+                      client: shelbyClient,
+                      account: connectedAddress,
+                      network: selectedNetwork,
+                    })
+                      .then((indexedCapsules) => {
+                        setCapsuleScope(currentScope);
+                        setCapsules(indexedCapsules);
+                        setIndexStatus(`Loaded ${capsuleCountLabel(indexedCapsules.length)} from Shelby for ${formatAddress(connectedAddress)}.`);
+                        setActivity(`Loaded ${capsuleCountLabel(indexedCapsules.length)} from Shelby for this wallet.`);
+                      })
+                      .catch((error) => {
+                        setIndexError(error instanceof Error ? error.message : "Yora could not load capsules from Shelby.");
+                        setIndexStatus("Shelby capsule load failed.");
+                      })
+                      .finally(() => setIsIndexLoading(false));
+                  }}
+                >
+                  Refresh
+                </button>
+              </section>
+            )}
+
+            <div className="hero-panel">
+              <div>
+                <p className="eyebrow">Vault overview</p>
+                <h2>Private capsules across Shelby networks.</h2>
+                <p>
+                  Track sent and received capsules, unlock windows, and Shelby storage status from one focused vault.
+                </p>
+              </div>
+              <div className="timepiece compact" aria-hidden="true">
+                <div className="orbit orbit-one" />
+                <div className="orbit orbit-two" />
+                <div className="dial">
+                  <KeyRound size={34} />
+                  <span>{readyCount}</span>
+                  <small>unlockable</small>
+                </div>
+              </div>
+            </div>
+
+            <div className="metrics-grid">
+              <article className="metric-card">
+                <Gauge size={20} />
+                <span>{receivedCount}</span>
+                <p>Received</p>
+              </article>
+              <article className="metric-card">
+                <ArrowDownToLine size={20} />
+                <span>{formatBytes(totalBytes)}</span>
+                <p>Encrypted payload</p>
+              </article>
+              <article className="metric-card">
+                <Sparkles size={20} />
+                <span>{readyCount}</span>
+                <p>Unlockable now</p>
+              </article>
+              <article className="metric-card">
+                <Clock3 size={20} />
+                <span>{lockedCount}</span>
+                <p>Locked by time</p>
+              </article>
+            </div>
+
+            <section className="panel recent-panel">
+              <div className="section-heading">
+                <History size={22} />
+                <div>
+                  <h2>Received inbox</h2>
+                  <p>{receivedInbox.length ? "Capsules addressed to this wallet" : "No received capsules found"}</p>
+                </div>
+              </div>
+              <div className="timeline-list">
+                {receivedInbox.length ? (
+                  receivedInbox.map((capsule) => (
+                    <article key={capsule.id}>
+                      <span>Received</span>
+                      <strong>{capsule.title}</strong>
+                      <p>From {formatAddress(capsule.creator)} / {formatCapsuleStorage(capsule)}</p>
+                    </article>
+                  ))
+                ) : (
+                  <div className="empty-state slim">
+                    <KeyRound size={24} />
+                    <h3>No received capsules yet.</h3>
+                    <p>Yora will show capsules here when Shelby has envelopes for this recipient address.</p>
+                  </div>
+                )}
+              </div>
+            </section>
+          </section>
+        )}
+
+        {activePage === "create" && (
+          <section className="page-grid">
+            <form
+              className="composer panel"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void sealCapsule();
+              }}
+            >
+              <div className="section-heading">
+                <FileLock2 size={22} />
+                <div>
+                  <h2>Seal a capsule</h2>
+                  <p>Encrypt locally. Store encrypted blobs on Shelby.</p>
+                </div>
+              </div>
+              {networkMismatch && (
+                <div className="network-warning" role="status">
+                  <Server size={17} />
+                  <span>Your wallet is on {walletNetworkName}. Yora is set to {networkConfig.shortLabel}.</span>
+                </div>
+              )}
+
+              <label>
+                Capsule name
+                <input
+                  value={draft.title}
+                  onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+                  placeholder="Launch note, handoff, private archive"
+                />
+              </label>
+
+              <label>
+                Recipient address
+                <input
+                  value={draft.recipient}
+                  onChange={(event) => setDraft({ ...draft, recipient: event.target.value })}
+                  placeholder="0x..."
+                />
+              </label>
+
+              <label>
+                Unlock time
+                <input
+                  type="datetime-local"
+                  value={toDateTimeLocal(draft.unlockAt)}
+                  onChange={(event) => setDraft({ ...draft, unlockAt: new Date(event.target.value).getTime() })}
+                />
+              </label>
+
+              <div className="segmented" role="tablist" aria-label="Payload type">
+                <button type="button" className={mode === "message" ? "active" : ""} onClick={() => setMode("message")}>
+                  Message
+                </button>
+                <button type="button" className={mode === "file" ? "active" : ""} onClick={() => setMode("file")}>
+                  File
+                </button>
+              </div>
+
+              {mode === "message" ? (
+                <label>
+                  Message
+                  <textarea
+                    value={draft.message}
+                    onChange={(event) => setDraft({ ...draft, message: event.target.value })}
+                    rows={7}
+                  />
+                </label>
+              ) : (
+                <label className="dropzone">
+                  <Upload size={22} />
+                  <span>{draft.file ? draft.file.name : "Choose a file to encrypt"}</span>
+                  <input
+                    type="file"
+                    onChange={(event) => setDraft({ ...draft, file: event.target.files?.[0] ?? null })}
+                  />
+                </label>
+              )}
+
+              <button className="primary" disabled={isBusy}>
+                <Send size={18} />
+                {isBusy ? "Sealing capsule..." : "Seal capsule"}
+              </button>
+              <div className="seal-progress" aria-label="Seal progress">
+                {sealSteps.map(([step, label], index) => (
+                  <span
+                    className={[
+                      "seal-step",
+                      activeSealIndex === index ? "active" : "",
+                      activeSealIndex > index || sealStep === "sealed" ? "done" : "",
+                    ].join(" ").trim()}
+                    key={step}
+                  >
+                    <Check size={13} />
+                    {label}
+                  </span>
+                ))}
+              </div>
+              <p className="activity">{activity}</p>
+              {lastError && sealStep === "error" && (
+                <div className="error-panel" role="alert">
+                  <strong>Shelby did not write the capsule</strong>
+                  <p>{lastError}</p>
+                  <div>
+                    <button className="ghost-button" type="button" onClick={() => void sealCapsule()}>
+                      <RefreshCw size={15} />
+                      Try again
+                    </button>
+                    <button className="ghost-button" type="button" onClick={() => switchNetwork(selectedNetwork === "shelbynet" ? "testnet" : "shelbynet")}>
+                      Switch network
+                    </button>
+                    <button className="ghost-button" type="button" onClick={openWalletPicker}>
+                      Reconnect wallet
+                    </button>
+                  </div>
+                </div>
+              )}
+            </form>
+
+            <aside className="panel create-aside">
+              <ShieldCheck size={24} />
+              <h2>Storage route</h2>
+              <p>Yora encrypts the payload locally, then writes the encrypted capsule to the selected Shelby route. If the write fails, no capsule is saved.</p>
+              <dl>
+                <div>
+                  <dt>Network</dt>
+                  <dd>{networkConfig.label}</dd>
+                </div>
+                <div>
+                  <dt>Storage</dt>
+                  <dd>{networkConfig.shortLabel} blob</dd>
+                </div>
+                <div>
+                  <dt>Algorithm</dt>
+                  <dd>AES-GCM 256</dd>
+                </div>
+              </dl>
+            </aside>
+          </section>
+        )}
+
+        {activePage === "capsules" && (
+          <section className="panel capsule-vault-page">
+            <div className="vault-header">
+              <div className="section-heading">
+                <Archive size={22} />
+                <div>
+                  <h2>Capsule vault</h2>
+                  <p>{visibleCapsules.length ? `${capsuleCountLabel(visibleCapsules.length)} for this wallet` : "No capsules for this wallet"}</p>
+                </div>
+              </div>
+              <button className="primary" onClick={() => setActivePage("create")}>
+                <Plus size={16} />
+                New capsule
+              </button>
+            </div>
+
+            <div className="capsule-summary">
+              <article>
+                <span>Total</span>
+                <strong>{sealedCount}</strong>
+              </article>
+              <article>
+                <span>Received</span>
+                <strong>{receivedCount}</strong>
+              </article>
+              <article>
+                <span>Locked</span>
+                <strong>{lockedCount}</strong>
+              </article>
+              <article>
+                <span>Unlockable</span>
+                <strong>{readyCount}</strong>
+              </article>
+            </div>
+
+            <div className="cards">
+              {!visibleCapsules.length && (
+                <div className="capsule-empty-shell">
+                  <div className="empty-state capsule-empty">
+                    <div className="empty-orb">
+                      <KeyRound size={30} />
+                    </div>
+                    <div>
+                      <p className="eyebrow">Vault ready</p>
+                      <h3>No capsules for this wallet yet.</h3>
+                      <p>Create a new capsule, or connect the recipient wallet used by another sender.</p>
+                    </div>
+                    <button className="primary" onClick={() => setActivePage("create")}>
+                      <Plus size={16} />
+                      Create capsule
+                    </button>
+                  </div>
+                </div>
+              )}
+              {visibleCapsules.map((capsule) => {
+                const isRecipient = sameAddress(capsule.recipient, connectedAddress);
+                const isCreator = sameAddress(capsule.creator, connectedAddress);
+                const locked = Date.now() < capsule.unlockAt;
+                const direction = isRecipient ? "received" : isCreator ? "sent" : "external";
+                return (
+                  <article className={`capsule-card capsule-${direction}`} key={capsule.id}>
+                    <div className="card-top">
+                      <span className={`status ${locked ? "locked" : "ready"}`}>
+                        {locked ? <Clock3 size={13} /> : <Check size={13} />}
+                        {locked ? "Locked" : "Unlockable"}
+                      </span>
+                      <span className={`direction-badge ${direction}`}>
+                        {isRecipient ? <CornerDownLeft size={13} /> : <CornerUpRight size={13} />}
+                        {isRecipient ? "Received" : isCreator ? "Sent" : formatCapsuleStorage(capsule)}
+                      </span>
+                    </div>
+                    <h3>{capsule.title}</h3>
+                    <p className="capsule-note">
+                      {isRecipient
+                        ? `Received from ${formatAddress(capsule.creator)} on ${new Date(capsule.createdAt).toLocaleDateString()}`
+                        : `Sent to ${formatAddress(capsule.recipient)} on ${new Date(capsule.createdAt).toLocaleDateString()}`}
+                    </p>
+                    <dl>
+                      <div>
+                        <dt>{isRecipient ? "Sender" : "Recipient"}</dt>
+                        <dd>{formatAddress(isRecipient ? capsule.creator : capsule.recipient)}</dd>
+                      </div>
+                      <div>
+                        <dt>Direction</dt>
+                        <dd>{isRecipient ? "Inbound" : "Outbound"}</dd>
+                      </div>
+                      <div>
+                        <dt>Unlock time</dt>
+                        <dd>{new Date(capsule.unlockAt).toLocaleString()}</dd>
+                      </div>
+                      <div>
+                        <dt>Payload</dt>
+                        <dd>{capsule.payloadKind} / {formatBytes(capsule.sizeBytes)}</dd>
+                      </div>
+                    </dl>
+                    <div className="capsule-actions">
+                      <button className="ghost-button" onClick={() => setSelectedCapsule(capsule)}>
+                        <Layers3 size={16} />
+                        Details
+                      </button>
+                      <button
+                        className="secondary"
+                        onClick={() => void unsealCapsule(capsule)}
+                        disabled={!isRecipient || locked || openingCapsuleId === capsule.id}
+                        title={!isRecipient ? "Connect the recipient wallet to unseal this capsule." : locked ? "This capsule has not reached its unlock time." : undefined}
+                      >
+                        <CalendarClock size={16} />
+                        {isRecipient ? (openingCapsuleId === capsule.id ? "Approve unseal" : "Unseal") : "Sent capsule"}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {activePage === "transactions" && (
+          <section className="panel">
+            <div className="section-heading">
+              <History size={22} />
+              <div>
+                <h2>Transaction history</h2>
+                <p>Outgoing Shelby writes from this wallet</p>
+              </div>
+            </div>
+            <div className="transaction-table">
+              <div className="transaction-head">
+                <span>Status</span>
+                <span>Capsule</span>
+                <span>Network</span>
+                <span>Blob</span>
+                <span>Digest</span>
+                <span>Explorer</span>
+                <span>Time</span>
+              </div>
+              {transactionCapsules.length ? (
+                transactionCapsules.map((capsule) => (
+                  <article key={capsule.id} className="transaction-row">
+                    <span className="status ready">
+                      <Check size={13} />
+                      Sealed
+                    </span>
+                    <strong>{capsule.title}</strong>
+                    <span>{formatCapsuleStorage(capsule)}</span>
+                    <button className="copy-chip" onClick={() => void navigator.clipboard?.writeText(capsule.blobName)}>
+                      <Copy size={13} />
+                      Copy blob
+                    </button>
+                    <button className="copy-chip" onClick={() => void navigator.clipboard?.writeText(capsule.ciphertextDigest)}>
+                      {shortDigest(capsule.ciphertextDigest)}
+                    </button>
+                    <a className="explorer-link" href={shelbyExplorerBlobUrl(capsule)} target="_blank" rel="noreferrer">
+                      <ExternalLink size={13} />
+                      Explorer
+                    </a>
+                    <time>{new Date(capsule.createdAt).toLocaleString()}</time>
+                  </article>
+                ))
+              ) : (
+                <div className="empty-state slim">
+                  <History size={24} />
+                  <h3>No outgoing Shelby writes yet.</h3>
+                  <p>Seal a capsule from this wallet to create the first Shelby blob entry.</p>
+                  <button className="ghost-button" onClick={() => setActivePage("create")}>
+                    Create capsule
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {activePage === "profile" && (
+          <section className="profile-page">
+            <div className="panel profile-card">
+              <div className="profile-avatar">
+                <Fingerprint size={40} />
+              </div>
+              <div className="profile-info">
+                <h2>{wallet.connected ? "Wallet profile" : "No wallet connected"}</h2>
+                <p>{connectedAddress || "Connect an Aptos wallet to manage sent, received, and unlockable capsules."}</p>
+                <div className="profile-meta">
+                  <span>{networkConfig.shortLabel}</span>
+                  <span>{wallet.wallet?.name ?? "No wallet"}</span>
+                  <span>{walletNetworkName || "No network"}</span>
+                </div>
+              </div>
+              <div className="profile-actions">
+                <button
+                  className="secondary"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(connectedAddress);
+                    setActivity("Wallet address copied to clipboard.");
+                  }}
+                  disabled={!connectedAddress}
+                >
+                  <Copy size={16} />
+                  Copy address
+                </button>
+                {wallet.connected ? (
+                  <button className="ghost-button" onClick={() => wallet.disconnect()}>
+                    <LogOut size={16} />
+                    Disconnect
+                  </button>
+                ) : (
+                  <button className="ghost-button" onClick={openWalletPicker}>
+                    <Wallet size={16} />
+                    Connect wallet
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="panel profile-stats">
+              <article>
+                <span>Received</span>
+                <strong>{receivedCount}</strong>
+                <p>Capsules where this wallet is the recipient</p>
+              </article>
+              <article>
+                <span>Unlockable</span>
+                <strong>{readyCount}</strong>
+                <p>Received capsules past their unlock time</p>
+              </article>
+              <article>
+                <span>Sent</span>
+                <strong>{sentCount}</strong>
+                <p>Capsules sealed by this wallet</p>
+              </article>
+              <article>
+                <span>Opened</span>
+                <strong>{openedCount}</strong>
+                <p>Capsules opened on this device</p>
+              </article>
+            </div>
+
+            <div className="panel settings-panel">
+              <div className="section-heading">
+                <Settings size={22} />
+                <div>
+                  <h2>Vault summary</h2>
+                  <p>Current wallet, route, and storage state</p>
+                </div>
+              </div>
+              <dl>
+                <div>
+                  <dt>Yora route</dt>
+                  <dd>{networkConfig.label}</dd>
+                </div>
+                <div>
+                  <dt>Wallet network</dt>
+                  <dd>{walletNetworkName || "Not connected"}</dd>
+                </div>
+                <div>
+                  <dt>Storage mode</dt>
+                  <dd>Shelby encrypted blobs</dd>
+                </div>
+                <div>
+                  <dt>Total payload</dt>
+                  <dd>{formatBytes(totalBytes)}</dd>
+                </div>
+                <div>
+                  <dt>Activity</dt>
+                  <dd>{activity}</dd>
+                </div>
+              </dl>
+            </div>
+          </section>
+        )}
+
+        <section className="assurance">
+          <div>
+            <ShieldCheck size={20} />
+            <h2>Shelby storage boundary</h2>
+          </div>
+          <p>
+            Yora encrypts payloads locally and writes each new capsule as an encrypted Shelby blob.
+            If Shelby rejects the write, Yora does not create the capsule.
+          </p>
+          <span className="runtime-chip">{RUNTIME_VERSION} / {indexStatus}</span>
+        </section>
+      </section>
+
+      {selectedCapsule && (
+        <section className="drawer-backdrop" onClick={() => setSelectedCapsule(null)}>
+          <aside className="capsule-drawer" aria-label="Capsule details" onClick={(event) => event.stopPropagation()}>
+            <button className="drawer-close" onClick={() => setSelectedCapsule(null)} aria-label="Close capsule details">
+              <X size={17} />
+            </button>
+            <p className="eyebrow">Capsule details</p>
+            <h2>{selectedCapsule.title}</h2>
+            <div className="drawer-status">
+              <span className={`status ${Date.now() < selectedCapsule.unlockAt ? "locked" : "ready"}`}>
+                {Date.now() < selectedCapsule.unlockAt ? <Clock3 size={13} /> : <Check size={13} />}
+                {Date.now() < selectedCapsule.unlockAt ? "Locked" : "Unlockable"}
+              </span>
+              <span className="status shelby">
+                <Server size={13} />
+                {formatCapsuleStorage(selectedCapsule)}
+              </span>
+            </div>
+            <div className="drawer-sections">
+              <section>
+                <h3>Access rules</h3>
+                <dl>
+                  <div>
+                    <dt>Recipient</dt>
+                    <dd>{selectedCapsule.recipient}</dd>
+                  </div>
+                  <div>
+                    <dt>Sender</dt>
+                    <dd>{formatAddress(selectedCapsule.creator)}</dd>
+                  </div>
+                  <div>
+                    <dt>Unlock time</dt>
+                    <dd>{new Date(selectedCapsule.unlockAt).toLocaleString()}</dd>
+                  </div>
+                </dl>
+              </section>
+              <section>
+                <h3>Storage</h3>
+                <dl>
+                  <div>
+                    <dt>Route</dt>
+                    <dd>{formatCapsuleStorage(selectedCapsule)}</dd>
+                  </div>
+                  <div>
+                    <dt>Blob name</dt>
+                    <dd>{selectedCapsule.blobName}</dd>
+                  </div>
+                </dl>
+              </section>
+              <section>
+                <h3>Payload</h3>
+                <dl>
+                  <div>
+                    <dt>Type</dt>
+                    <dd>{selectedCapsule.payloadKind} / {formatBytes(selectedCapsule.sizeBytes)}</dd>
+                  </div>
+                  <div>
+                    <dt>Digest</dt>
+                    <dd>{selectedCapsule.ciphertextDigest}</dd>
+                  </div>
+                </dl>
+              </section>
+            </div>
+            <button
+              className="primary"
+              onClick={() => void unsealCapsule(selectedCapsule)}
+              disabled={
+                !sameAddress(selectedCapsule.recipient, connectedAddress) ||
+                Date.now() < selectedCapsule.unlockAt ||
+                openingCapsuleId === selectedCapsule.id
+              }
+            >
+              <CalendarClock size={16} />
+              {openingCapsuleId === selectedCapsule.id ? "Awaiting wallet approval..." : "Unseal capsule"}
+            </button>
+          </aside>
+        </section>
+      )}
+
+      {walletPicker}
+
+      {opened && (
+        <section className="opened" aria-live="polite">
+          <button onClick={() => setOpened(null)} aria-label="Close unsealed capsule">
+            Close
+          </button>
+          <h2>{opened.title}</h2>
+          {opened.text ? <p>{opened.text}</p> : <a href={opened.url} download>Download unsealed file</a>}
+        </section>
+      )}
+    </main>
+  );
+}
