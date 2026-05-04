@@ -14,6 +14,7 @@ export interface CapsuleManifest {
   storage: "shelby" | "local";
   sizeBytes: number;
   mimeType: string;
+  fileName?: string;
   iv: string;
   keyId: string;
   ciphertextDigest: string;

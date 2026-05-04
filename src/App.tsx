@@ -124,6 +124,11 @@ function formatShortDateTime(timestamp: number): string {
   }).format(new Date(timestamp));
 }
 
+function isPreviewableImage(mimeType?: string, fileName?: string): boolean {
+  if (mimeType?.startsWith("image/")) return true;
+  return Boolean(fileName && /\.(apng|avif|gif|jpe?g|png|svg|webp)$/i.test(fileName));
+}
+
 function readOpenedCapsuleIds(): string[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(OPENED_CAPSULES_KEY) || "[]") as unknown;
@@ -197,6 +202,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
     text?: string;
     url?: string;
     mimeType?: string;
+    fileName?: string;
     payloadKind: "message" | "file";
   } | null>(null);
   const [unsealIssue, setUnsealIssue] = useState<{ title: string; message: string } | null>(null);
@@ -368,9 +374,13 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       setSealStep("error");
       return;
     }
-    if (!draft.recipient || !draft.title || (!draft.message && !draft.file)) {
+    if (!draft.recipient || !draft.title || (mode === "message" ? !draft.message.trim() : !draft.file)) {
       setActivity("Complete the capsule details before sealing.");
-      setLastError("Add a title, recipient address, unlock time, and either a message or a file.");
+      setLastError(
+        mode === "file"
+          ? "Choose a file before sealing this capsule."
+          : "Add a title, recipient address, unlock time, and message before sealing.",
+      );
       setSealStep("error");
       return;
     }
@@ -408,6 +418,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       storage: "shelby",
       sizeBytes: encrypted.sizeBytes,
       mimeType: encrypted.mimeType,
+      fileName: mode === "file" ? draft.file?.name : undefined,
       iv: Array.from(encrypted.iv).join(","),
       keyId,
       ciphertextDigest: encrypted.digest,
@@ -541,6 +552,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
           title: capsule.title,
           url: URL.createObjectURL(blob),
           mimeType: capsule.mimeType,
+          fileName: capsule.fileName,
           payloadKind: "file",
         });
       }
@@ -1102,10 +1114,24 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               </label>
 
               <div className="segmented" role="tablist" aria-label="Payload type">
-                <button type="button" className={mode === "message" ? "active" : ""} onClick={() => setMode("message")}>
+                <button
+                  type="button"
+                  className={mode === "message" ? "active" : ""}
+                  onClick={() => {
+                    setMode("message");
+                    setDraft((current) => ({ ...current, file: null }));
+                  }}
+                >
                   Message
                 </button>
-                <button type="button" className={mode === "file" ? "active" : ""} onClick={() => setMode("file")}>
+                <button
+                  type="button"
+                  className={mode === "file" ? "active" : ""}
+                  onClick={() => {
+                    setMode("file");
+                    setDraft((current) => ({ ...current, message: "" }));
+                  }}
+                >
                   File
                 </button>
               </div>
@@ -1122,7 +1148,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               ) : (
                 <label className="dropzone">
                   <Upload size={22} />
-                  <span>{draft.file ? draft.file.name : "Choose a file to encrypt"}</span>
+                  <span>{draft.file ? `${draft.file.name} / ${draft.file.type || "file"}` : "Choose a file to encrypt"}</span>
                   <input
                     type="file"
                     onChange={(event) => setDraft({ ...draft, file: event.target.files?.[0] ?? null })}
@@ -1607,7 +1633,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               </div>
             ) : (
               <div className="opened-content file-preview">
-                {opened.mimeType?.startsWith("image/") && opened.url ? (
+                {isPreviewableImage(opened.mimeType, opened.fileName) && opened.url ? (
                   <img src={opened.url} alt={`Unsealed file from ${opened.title}`} />
                 ) : opened.mimeType === "application/pdf" && opened.url ? (
                   <iframe src={opened.url} title={`Unsealed PDF from ${opened.title}`} />
