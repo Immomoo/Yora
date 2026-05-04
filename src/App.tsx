@@ -431,16 +431,24 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       });
     }
 
-    await escrowKey({
-      keyId,
-      recipient: draft.recipient,
-      unlockAt: draft.unlockAt,
-      keyBytes: encrypted.keyBytes,
-      capsule: manifest,
-      creatorMessage,
-      creatorSignature,
-      creatorPublicKey: wallet.account?.publicKey?.toString(),
-    });
+    try {
+      await escrowKey({
+        keyId,
+        recipient: draft.recipient,
+        unlockAt: draft.unlockAt,
+        keyBytes: encrypted.keyBytes,
+        capsule: manifest,
+        creatorMessage,
+        creatorSignature,
+        creatorPublicKey: wallet.account?.publicKey?.toString(),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Remote key escrow did not complete.";
+      setSealStep("error");
+      setLastError(message);
+      setActivity(`Key escrow failed: ${message}`);
+      return;
+    }
     setCapsuleScope(currentScope);
     setCapsules((current) => [manifest, ...current.filter((capsule) => capsule.id !== manifest.id)]);
     setActivePage("capsules");
@@ -510,7 +518,11 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       );
       setActivity("Capsule unsealed after recipient approval.");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "This capsule is not ready to unseal.";
+      const rawMessage = error instanceof Error ? error.message : "This capsule is not ready to unseal.";
+      const message =
+        rawMessage === "Capsule key escrow was not found."
+          ? "This capsule was stored on Shelby, but its release key was not escrowed on Yora's remote key-release service. It was likely created before remote key release was active, or the creator's key escrow step failed. Ask the creator to seal a new capsule after key release is enabled."
+          : rawMessage;
       setLastError(message);
       setActivity(message);
       setUnsealIssue({

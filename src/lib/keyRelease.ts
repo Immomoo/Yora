@@ -47,6 +47,17 @@ function signaturePayload(signature: unknown): unknown {
   };
 }
 
+async function responseErrorMessage(response: Response, fallback: string): Promise<string> {
+  const detail = await response.text().catch(() => "");
+  if (!detail) return fallback;
+  try {
+    const parsed = JSON.parse(detail) as { error?: unknown };
+    return typeof parsed.error === "string" ? parsed.error : detail;
+  } catch {
+    return detail;
+  }
+}
+
 async function encryptKeyForRemote(keyBytes: Uint8Array): Promise<{ encryptedKey: string; keyEncoding: string }> {
   if (!REMOTE_PUBLIC_KEY) {
     throw new Error("Remote key release is enabled, but VITE_YORA_KEY_RELEASE_PUBLIC_KEY is missing.");
@@ -140,8 +151,7 @@ export async function escrowKey(params: {
     });
 
     if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      throw new Error(detail || `Remote key escrow failed with status ${response.status}.`);
+      throw new Error(await responseErrorMessage(response, `Remote key escrow failed with status ${response.status}.`));
     }
     return;
   }
@@ -190,8 +200,18 @@ export async function releaseKey(params: {
     });
 
     if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      throw new Error(detail || `Remote key release failed with status ${response.status}.`);
+      const message = await responseErrorMessage(response, `Remote key release failed with status ${response.status}.`);
+      const localKey = readKeys().find((key) => key.keyId === params.keyId);
+      if (message === "Capsule key escrow was not found." && localKey) {
+        if (!sameAddress(localKey.recipient, params.recipient)) {
+          throw new Error("Connect the recipient wallet for this capsule.");
+        }
+        if ((params.now ?? Date.now()) < localKey.unlockAt) {
+          throw new Error("This capsule is still locked.");
+        }
+        return base64ToBytes(localKey.key);
+      }
+      throw new Error(message);
     }
 
     const payload = (await response.json()) as { key?: string };
