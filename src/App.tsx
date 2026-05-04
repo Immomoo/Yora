@@ -243,7 +243,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
     file: null,
   });
   const [mode, setMode] = useState<"message" | "file">("message");
-  const [activity, setActivity] = useState("Ready to write an encrypted capsule to Shelby.");
+  const [activity, setActivity] = useState("Ready to seal an encrypted capsule.");
   const [opened, setOpened] = useState<{
     title: string;
     text?: string;
@@ -314,7 +314,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
 
   const uploadBlobs = useUploadBlobs({
     client: shelbyClient,
-    onError: (error) => setActivity(`Shelby rejected the blob write: ${error.message}`),
+    onError: (error) => setActivity(`Shelby rejected the storage write: ${error.message}`),
   });
   const isBusy =
     uploadBlobs.isPending ||
@@ -384,7 +384,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
         setCapsules([]);
         setCapsuleScope(currentScope);
         setIndexError(null);
-        setIndexStatus("Connect a wallet to load its Shelby capsules.");
+        setIndexStatus("Connect a wallet to load capsules from Shelby.");
         return;
       }
 
@@ -414,7 +414,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
           setCapsules([]);
           setCapsuleScope(currentScope);
           setIndexError(error instanceof Error ? error.message : "Yora could not load capsules from Shelby.");
-          setIndexStatus("Shelby capsule load failed.");
+          setIndexStatus("Could not load Shelby capsules.");
         }
       } finally {
         if (!cancelled) setIsIndexLoading(false);
@@ -442,7 +442,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
     setLastError(null);
     if (!connectedAddress || !wallet.signAndSubmitTransaction) {
       setActivity("Connect an Aptos wallet before sealing.");
-      setLastError("Connect a wallet so Yora can sign the Shelby blob write.");
+      setLastError("Connect a wallet so Yora can approve the Shelby storage write.");
       setSealStep("error");
       return;
     }
@@ -469,8 +469,8 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       return;
     }
     if (isRemoteKeyReleaseEnabled() && !wallet.signMessage) {
-      setActivity("This wallet cannot sign the remote key escrow request.");
-      setLastError("Choose a wallet that supports message signing before using the remote key-release service.");
+      setActivity("This wallet cannot approve the remote key escrow request.");
+      setLastError("Choose a wallet that supports message signing, then seal the capsule again.");
       setSealStep("error");
       return;
     }
@@ -506,7 +506,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
 
     try {
       setSealStep("approving");
-      setActivity("Approve the Shelby blob write in your wallet...");
+      setActivity("Approve the Shelby storage write in your wallet...");
       await uploadBlobs.mutateAsync({
         signer: { account: connectedAddress, signAndSubmitTransaction: wallet.signAndSubmitTransaction },
         blobs: [{ blobName, blobData: encodeCapsuleEnvelope(manifest, encrypted) }],
@@ -515,10 +515,10 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       setSealStep("uploading");
       setActivity("Shelby accepted the encrypted blob.");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Shelby did not accept the blob write. No capsule was created.";
+      const message = error instanceof Error ? error.message : "Shelby did not accept the encrypted capsule. No capsule was created.";
       setSealStep("error");
       setLastError(message);
-      setActivity(`Shelby write failed: ${message}`);
+      setActivity(`Shelby storage failed: ${message}`);
       return;
     }
 
@@ -543,7 +543,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
     let creatorMessage: string | undefined;
     let creatorSignature: unknown;
     if (isRemoteKeyReleaseEnabled()) {
-      setActivity("Approve key escrow for the remote release service...");
+      setActivity("Approve key escrow so the recipient can unseal later...");
       creatorMessage = buildKeyEscrowMessage(manifest);
       creatorSignature = await wallet.signMessage({
         message: creatorMessage,
@@ -585,7 +585,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       registryStatus: isAptosRegistryEnabled(selectedNetwork) ? "recorded" : "optional",
     });
     setSealStep("sealed");
-    setActivity("Capsule sealed and written to Shelby.");
+    setActivity("Capsule sealed. Shelby storage and access rules are ready.");
   }
 
   async function unsealCapsule(capsule: CapsuleManifest) {
@@ -681,7 +681,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 }
               : current,
           );
-          setActivity("Capsule unsealed. Aptos release marker was skipped.");
+          setActivity("Capsule unsealed. Aptos release marker was not recorded.");
         }
       } else {
         setActivity("Capsule unsealed after recipient approval.");
@@ -690,7 +690,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       const rawMessage = error instanceof Error ? error.message : "This capsule is not ready to unseal.";
       const message =
         rawMessage === "Capsule key escrow was not found."
-          ? "This capsule was stored on Shelby, but its release key was not escrowed on Yora's remote key-release service. It was likely created before remote key release was active, or the creator's key escrow step failed. Ask the creator to seal a new capsule after key release is enabled."
+          ? "Yora found the Shelby capsule, but not its remote release key. It was likely sealed before remote key release was enabled, or the sender's key escrow step failed. Ask the sender to seal a new capsule."
           : rawMessage;
       setLastError(message);
       setActivity(message);
@@ -715,7 +715,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
     { label: "Aptos", value: networkConfig.shortLabel, tone: wallet.connected ? "good" : "idle" },
     { label: "Shelby", value: uploadBlobs.isPending ? "Uploading" : networkConfig.shortLabel, tone: uploadBlobs.isPending ? "busy" : "good" },
     { label: "Blobs", value: "Shelby only", tone: "good" },
-    { label: "Keys", value: isRemoteKeyReleaseEnabled() ? "Remote" : "Dev vault", tone: isRemoteKeyReleaseEnabled() ? "good" : "idle" },
+    { label: "Keys", value: isRemoteKeyReleaseEnabled() ? "Remote" : "Browser only", tone: isRemoteKeyReleaseEnabled() ? "good" : "idle" },
     {
       label: "Registry",
       value: isAptosRegistryEnabled(selectedNetwork) ? "Aptos" : "Optional",
@@ -726,7 +726,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
   const sealSteps: Array<[SealStep, string]> = [
     ["encrypting", "Encrypt"],
     ["approving", "Wallet approval"],
-    ["uploading", "Shelby commit"],
+    ["uploading", "Shelby storage"],
     ["registry", "Aptos registry"],
     ["escrow", "Release key"],
     ["sealed", "Capsule sealed"],
@@ -827,7 +827,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 <img src={availableWallet.icon} alt="" />
                 <span>
                   <strong>{availableWallet.name}</strong>
-                  <small>{wallet.wallet?.name === availableWallet.name ? "Connected now" : "Ready to connect"}</small>
+                  <small>{wallet.wallet?.name === availableWallet.name ? "Connected" : "Ready to connect"}</small>
                 </span>
                 <Check size={16} />
               </button>
@@ -852,7 +852,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
         </div>
 
         {!detectedWallets.length && (
-          <p className="wallet-help">No Aptos wallet is available. Install or enable one, refresh the page, then connect again.</p>
+          <p className="wallet-help">No Aptos wallet is available on this device. Install or enable one, refresh the page, then connect again.</p>
         )}
       </aside>
     </section>
@@ -899,7 +899,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
           <div>
             <h3>Seal once. Open only when the rules match.</h3>
             <p>
-              Yora keeps the trust boundary clear from encryption to unseal.
+              Yora keeps every step explicit, from local encryption to recipient unseal.
             </p>
           </div>
           <ol>
@@ -931,7 +931,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
           <article>
             <span>02</span>
             <strong>Recipient gated</strong>
-            <p>The recipient address controls unsealing.</p>
+            <p>Only the selected recipient wallet can request the release key.</p>
           </article>
           <article>
             <span>03</span>
@@ -1006,7 +1006,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                   <strong>{isIndexLoading ? "Loading Shelby capsules..." : "Shelby capsules are unavailable."}</strong>
                   <p>
                     {isIndexLoading
-                      ? "Yora is reading sent and received capsule envelopes from Shelby."
+                      ? "Yora is reading sent and received capsules from Shelby."
                       : indexError}
                   </p>
                 </div>
@@ -1035,7 +1035,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                       })
                       .catch((error) => {
                         setIndexError(error instanceof Error ? error.message : "Yora could not load capsules from Shelby.");
-                        setIndexStatus("Shelby capsule load failed.");
+                        setIndexStatus("Could not load Shelby capsules.");
                       })
                       .finally(() => setIsIndexLoading(false));
                   }}
@@ -1051,7 +1051,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                   <p className="eyebrow">Vault overview</p>
                   <h2>Private capsules, ready when time allows.</h2>
                   <p>
-                    Track incoming capsules, unlock windows, and Shelby-backed encrypted storage from one focused wallet view.
+                    Track received capsules, unlock windows, and Shelby-backed encrypted storage from one focused wallet view.
                   </p>
                   <div className="dashboard-actions">
                     <button className="primary" onClick={() => setActivePage("create")}>
@@ -1173,7 +1173,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                   <div className="empty-state slim">
                     <KeyRound size={24} />
                     <h3>No received capsules yet.</h3>
-                    <p>Yora will show capsules here when Shelby has envelopes for this recipient address.</p>
+                    <p>Capsules sent to this wallet appear here after Shelby indexes the encrypted capsule.</p>
                   </div>
                 )}
               </div>
@@ -1208,7 +1208,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                   <ShieldCheck size={17} />
                   <span>
                     Aptos registry is active on {networkConfig.shortLabel}. After Shelby accepts the encrypted blob,
-                    Yora will ask for a registry approval to record capsule metadata on-chain.
+                    Yora will ask for one registry approval to record capsule metadata on Aptos.
                   </span>
                 </div>
               )}
@@ -1305,7 +1305,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               <p className="activity">{activity}</p>
               {lastError && sealStep === "error" && (
                 <div className="error-panel" role="alert">
-                  <strong>Shelby did not write the capsule</strong>
+                  <strong>Capsule was not sealed</strong>
                   <p>{lastError}</p>
                   <div>
                     <button className="ghost-button" type="button" onClick={() => void sealCapsule()}>
@@ -1326,7 +1326,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
             <aside className="panel create-aside">
               <ShieldCheck size={24} />
               <h2>Storage route</h2>
-              <p>Yora encrypts the payload locally, then writes the encrypted capsule to the selected Shelby route. If the write fails, no capsule is saved.</p>
+              <p>Yora encrypts the payload locally, then writes the encrypted capsule to the selected Shelby route. If Shelby rejects the write, no capsule is saved.</p>
               <dl>
                 <div>
                   <dt>Network</dt>
@@ -1386,7 +1386,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                   <p className="eyebrow">Capsule sealed</p>
                   <h3>{lastSealReceipt.capsule.title}</h3>
                   <p>
-                    Encrypted payload stored on Shelby. Recipient access is gated by wallet and unlock time.
+                    Encrypted payload stored on Shelby. Only the recipient wallet can unseal it after the unlock time.
                   </p>
                 </div>
                 <dl>
@@ -1444,7 +1444,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                     <div>
                       <p className="eyebrow">Vault ready</p>
                       <h3>No capsules for this wallet yet.</h3>
-                      <p>Create a new capsule, or connect the recipient wallet used by another sender.</p>
+                      <p>Create a capsule, or connect the recipient wallet another sender used.</p>
                     </div>
                     <button className="primary" onClick={() => setActivePage("create")}>
                       <Plus size={16} />
@@ -1503,7 +1503,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                       </div>
                       <a className="receipt-action" href={shelbyExplorerBlobUrl(capsule)} target="_blank" rel="noreferrer">
                         <ExternalLink size={13} />
-                        Explorer
+                        Shelby
                       </a>
                       {capsule.registryTxHash && (
                         <a
@@ -1526,10 +1526,10 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                         className="secondary"
                         onClick={() => void unsealCapsule(capsule)}
                         disabled={!isRecipient || locked || openingCapsuleId === capsule.id}
-                        title={!isRecipient ? "Connect the recipient wallet to unseal this capsule." : locked ? "This capsule has not reached its unlock time." : undefined}
+                        title={!isRecipient ? "Only the recipient wallet can unseal this capsule." : locked ? "This capsule has not reached its unlock time." : undefined}
                       >
                         <CalendarClock size={16} />
-                        {isRecipient ? (openingCapsuleId === capsule.id ? "Approve unseal" : "Unseal") : "Sent capsule"}
+                        {isRecipient ? (openingCapsuleId === capsule.id ? "Approve unseal" : "Unseal") : "Sender view"}
                       </button>
                     </div>
                   </article>
@@ -1545,7 +1545,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               <History size={22} />
               <div>
                 <h2>Transaction history</h2>
-                <p>Outgoing Shelby writes from this wallet</p>
+                <p>Capsules created by this wallet, with Shelby and registry receipts</p>
               </div>
             </div>
             <div className="transaction-table">
@@ -1553,7 +1553,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 <span>Status</span>
                 <span>Capsule</span>
                 <span>Receipt</span>
-                <span>Blob</span>
+                <span>Shelby</span>
                 <span>Digest</span>
                 <span>Registry</span>
                 <span>Time</span>
@@ -1593,7 +1593,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                           Aptos
                         </a>
                       ) : (
-                        <span>Optional</span>
+                        <span>Not recorded</span>
                       )}
                       <time>{new Date(capsule.createdAt).toLocaleString()}</time>
                     </article>
@@ -1602,8 +1602,8 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               ) : (
                 <div className="empty-state slim">
                   <History size={24} />
-                  <h3>No outgoing Shelby writes yet.</h3>
-                  <p>Seal a capsule from this wallet to create the first Shelby blob entry.</p>
+                  <h3>No created capsules yet.</h3>
+                  <p>Seal a capsule from this wallet to create its first Shelby storage receipt.</p>
                   <button className="ghost-button" onClick={() => setActivePage("create")}>
                     Create capsule
                   </button>
@@ -1658,7 +1658,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               <article>
                 <span>Received</span>
                 <strong>{receivedCount}</strong>
-                <p>Capsules where this wallet is the recipient</p>
+                <p>Capsules addressed to this wallet</p>
               </article>
               <article>
                 <span>Unlockable</span>
@@ -1673,7 +1673,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               <article>
                 <span>Opened</span>
                 <strong>{openedCount}</strong>
-                <p>Capsules opened on this device</p>
+                <p>Capsules unsealed from this browser</p>
               </article>
             </div>
 
@@ -1682,7 +1682,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 <Settings size={22} />
                 <div>
                   <h2>Vault summary</h2>
-                  <p>Current wallet, route, and storage state</p>
+                  <p>Current wallet, route, and protocol state</p>
                 </div>
               </div>
               <dl>
@@ -1758,7 +1758,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               </div>
               <a className="receipt-action" href={shelbyExplorerBlobUrl(selectedCapsule)} target="_blank" rel="noreferrer">
                 <ExternalLink size={13} />
-                Open explorer
+                Open Shelby
               </a>
               {withLocalReceipt(selectedCapsule).registryTxHash && (
                 <a
@@ -1866,11 +1866,11 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 ) : opened.mimeType?.startsWith("video/") && opened.url ? (
                   <video src={opened.url} controls />
                 ) : (
-                  <p>This file type is ready to download.</p>
+                  <p>Preview is not available for this file type. Download the decrypted file instead.</p>
                 )}
                 <a className="primary download-file" href={opened.url} download>
                   <ArrowDownToLine size={16} />
-                  Download unsealed file
+                  Download decrypted file
                 </a>
               </div>
             )}
@@ -1881,7 +1881,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                   ? "Recording release marker"
                   : opened.releaseMarkerStatus === "recorded"
                     ? "Release marker recorded"
-                    : "Release marker skipped"}
+                    : "Release marker not recorded"}
               </span>
               {opened.releaseTxHash && (
                 <a className="receipt-action" href={aptosExplorerTxUrl(opened.releaseTxHash, selectedNetwork)} target="_blank" rel="noreferrer">

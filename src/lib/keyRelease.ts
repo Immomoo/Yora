@@ -82,7 +82,7 @@ export function isRemoteKeyReleaseEnabled(): boolean {
 }
 
 export function keyReleaseModeLabel(): string {
-  return isRemoteKeyReleaseEnabled() ? "Remote key-release service" : "Development key vault";
+  return isRemoteKeyReleaseEnabled() ? "Remote key-release service" : "Browser-only key vault";
 }
 
 export function buildKeyEscrowMessage(capsule: CapsuleManifest): string {

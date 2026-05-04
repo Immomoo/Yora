@@ -51,11 +51,11 @@ The dApp currently supports:
 | Shelbynet route | Implemented | Uses the Shelbynet Shelby blob endpoint and API key. |
 | Shelby Testnet route | Implemented | Uses the Shelby Testnet blob endpoint and API key. |
 | Aptos wallet connection | Implemented | Uses the Aptos wallet adapter. |
-| Recipient discovery | Implemented | Yora indexes Shelby capsule envelopes addressed to the connected wallet. |
+| Recipient discovery | Implemented | Yora indexes encrypted Shelby capsules addressed to the connected wallet. |
 | Sent / received separation | Implemented | Capsule cards identify inbound and outbound capsules. |
 | Explorer links | Implemented | Outgoing writes link to the Shelby explorer. |
 | Remote key release | Integrated | Frontend supports a remote key-release API through env configuration. See [Phase 4 key release](docs/PHASE_4_KEY_RELEASE.md). |
-| Aptos Move registry | Integrated, pending deployment address | Optional registry module exists in [`move/`](move/README.md). Publish it per network and set `VITE_YORA_SHELBYNET_REGISTRY_ADDRESS` / `VITE_YORA_TESTNET_REGISTRY_ADDRESS` to activate registry writes and release markers. |
+| Aptos Move registry | Integrated | Shelbynet registry writes and release markers are active when `VITE_YORA_SHELBYNET_REGISTRY_ADDRESS` is set. Shelby Testnet can use `VITE_YORA_TESTNET_REGISTRY_ADDRESS` after access is available. |
 
 ## How It Works
 
