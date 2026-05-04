@@ -35,6 +35,12 @@ export function requireEnv(name) {
   return value;
 }
 
+function firstEnv(...names) {
+  const name = names.find((candidate) => process.env[candidate]?.trim());
+  if (!name) throw new Error(`${names.join(" or ")} is not configured.`);
+  return process.env[name].trim();
+}
+
 function normalizeHex(value) {
   if (typeof value !== "string" || !value) throw new Error("Expected a hex string.");
   return value.startsWith("0x") ? value : `0x${value}`;
@@ -84,8 +90,8 @@ export function assertFreshTimestamp(timestamp) {
 }
 
 async function kvCommand(command) {
-  const url = requireEnv("YORA_KV_REST_API_URL");
-  const token = requireEnv("YORA_KV_REST_API_TOKEN");
+  const url = firstEnv("YORA_KV_REST_API_URL", "YORA_KV_KV_REST_API_URL");
+  const token = firstEnv("YORA_KV_REST_API_TOKEN", "YORA_KV_KV_REST_API_TOKEN");
   const response = await fetch(url, {
     method: "POST",
     headers: {

@@ -224,6 +224,8 @@ YORA_KV_REST_API_URL=<upstash-or-vercel-kv-rest-url>
 YORA_KV_REST_API_TOKEN=<upstash-or-vercel-kv-rest-token>
 ```
 
+If the Vercel integration creates prefixed variables such as `YORA_KV_KV_REST_API_URL` and `YORA_KV_KV_REST_API_TOKEN`, the API accepts those names as fallbacks.
+
 The API endpoints are:
 
 ```text
