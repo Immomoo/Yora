@@ -55,7 +55,7 @@ The dApp currently supports:
 | Sent / received separation | Implemented | Capsule cards identify inbound and outbound capsules. |
 | Explorer links | Implemented | Outgoing writes link to the Shelby explorer. |
 | Remote key release | Integrated | Frontend supports a remote key-release API through env configuration. See [Phase 4 key release](docs/PHASE_4_KEY_RELEASE.md). |
-| Aptos Move registry | Implemented as package | Optional registry module exists in [`move/`](move/README.md). Publish it and set `VITE_YORA_REGISTRY_ADDRESS` to activate registry writes. |
+| Aptos Move registry | Integrated, pending deployment address | Optional registry module exists in [`move/`](move/README.md). Publish it per network and set `VITE_YORA_SHELBYNET_REGISTRY_ADDRESS` / `VITE_YORA_TESTNET_REGISTRY_ADDRESS` to activate registry writes and release markers. |
 
 ## How It Works
 
@@ -91,7 +91,7 @@ flowchart TB
     Indexer[Shelby blob index]
   end
 
-  subgraph FutureHardening[Planned production hardening]
+  subgraph Services[Production services]
     KeyService[Key-release service]
     Registry[Aptos Move registry]
   end
@@ -102,8 +102,9 @@ flowchart TB
   Runtime --> Blob
   Blob --> Indexer
   Indexer --> Runtime
-  Runtime -. Phase 4 .-> KeyService
-  KeyService -. verifies .-> Registry
+  Runtime --> KeyService
+  Runtime -. optional metadata tx .-> Registry
+  KeyService -. verifies request signatures .-> Runtime
 ```
 
 ## Capsule Lifecycle
@@ -148,6 +149,8 @@ VITE_SHELBY_TESTNET_API_KEY=
 VITE_YORA_KEY_RELEASE_URL=
 VITE_YORA_KEY_RELEASE_PUBLIC_KEY=
 VITE_YORA_REGISTRY_ADDRESS=
+VITE_YORA_SHELBYNET_REGISTRY_ADDRESS=
+VITE_YORA_TESTNET_REGISTRY_ADDRESS=
 YORA_KEY_RELEASE_PRIVATE_KEY=
 YORA_KV_REST_API_URL=
 YORA_KV_REST_API_TOKEN=
@@ -202,7 +205,14 @@ npm run move:compile -- --named-addresses yora=<publisher-address>
 npm run move:publish -- --named-addresses yora=<publisher-address>
 ```
 
-After publishing, initialize the registry and set `VITE_YORA_REGISTRY_ADDRESS=<publisher-address>`.
+After publishing, initialize the registry and set the matching address:
+
+```bash
+VITE_YORA_SHELBYNET_REGISTRY_ADDRESS=<shelbynet-publisher-address>
+VITE_YORA_TESTNET_REGISTRY_ADDRESS=<testnet-publisher-address>
+```
+
+`VITE_YORA_REGISTRY_ADDRESS` remains available as a fallback if both routes use the same publisher address.
 
 ## Deployment
 

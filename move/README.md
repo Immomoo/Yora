@@ -28,15 +28,18 @@ npm run move:compile -- --named-addresses yora=<publisher-address>
 npm run move:publish -- --named-addresses yora=<publisher-address>
 ```
 
-After publishing, initialize the registry once:
+After publishing, initialize the registry once on that same network:
 
 ```bash
 aptos move run \
   --function-id <publisher-address>::yora_registry::initialize
 ```
 
-Then set the frontend env variable:
+Then set the matching frontend env variable:
 
 ```bash
-VITE_YORA_REGISTRY_ADDRESS=<publisher-address>
+VITE_YORA_SHELBYNET_REGISTRY_ADDRESS=<shelbynet-publisher-address>
+VITE_YORA_TESTNET_REGISTRY_ADDRESS=<testnet-publisher-address>
 ```
+
+`VITE_YORA_REGISTRY_ADDRESS` is still supported as a fallback when both Yora routes share the same publisher address.

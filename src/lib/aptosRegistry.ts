@@ -1,30 +1,45 @@
 import type { CapsuleManifest } from "../types";
+import type { ShelbyNetworkId } from "../types";
 
-const REGISTRY_ADDRESS = import.meta.env.VITE_YORA_REGISTRY_ADDRESS?.trim() ?? "";
+const REGISTRY_ADDRESSES: Record<ShelbyNetworkId, string> = {
+  shelbynet:
+    import.meta.env.VITE_YORA_SHELBYNET_REGISTRY_ADDRESS?.trim() ||
+    import.meta.env.VITE_YORA_REGISTRY_ADDRESS?.trim() ||
+    "",
+  testnet:
+    import.meta.env.VITE_YORA_TESTNET_REGISTRY_ADDRESS?.trim() ||
+    import.meta.env.VITE_YORA_REGISTRY_ADDRESS?.trim() ||
+    "",
+};
 
 function textBytes(value: string): number[] {
   return Array.from(new TextEncoder().encode(value));
 }
 
-export function isAptosRegistryEnabled(): boolean {
-  return Boolean(REGISTRY_ADDRESS);
+export function aptosRegistryAddress(network: ShelbyNetworkId): string {
+  return REGISTRY_ADDRESSES[network];
 }
 
-export function registryModeLabel(): string {
-  return isAptosRegistryEnabled() ? "Aptos registry enabled" : "Aptos registry optional";
+export function isAptosRegistryEnabled(network: ShelbyNetworkId): boolean {
+  return Boolean(aptosRegistryAddress(network));
 }
 
-export function buildRegisterCapsuleTransaction(capsule: CapsuleManifest): unknown {
-  if (!REGISTRY_ADDRESS) {
-    throw new Error("VITE_YORA_REGISTRY_ADDRESS is not configured.");
+export function registryModeLabel(network: ShelbyNetworkId): string {
+  return isAptosRegistryEnabled(network) ? "Aptos registry enabled" : "Aptos registry optional";
+}
+
+export function buildRegisterCapsuleTransaction(capsule: CapsuleManifest, network: ShelbyNetworkId): unknown {
+  const registryAddress = aptosRegistryAddress(network);
+  if (!registryAddress) {
+    throw new Error(`Aptos registry address is not configured for ${network}.`);
   }
 
   return {
     data: {
-      function: `${REGISTRY_ADDRESS}::yora_registry::register_capsule`,
+      function: `${registryAddress}::yora_registry::register_capsule`,
       typeArguments: [],
       functionArguments: [
-        REGISTRY_ADDRESS,
+        registryAddress,
         textBytes(capsule.id),
         capsule.recipient,
         String(Math.floor(capsule.unlockAt / 1000)),
@@ -35,6 +50,21 @@ export function buildRegisterCapsuleTransaction(capsule: CapsuleManifest): unkno
         textBytes(capsule.payloadKind),
         String(capsule.sizeBytes),
       ],
+    },
+  };
+}
+
+export function buildMarkReleasedTransaction(capsule: CapsuleManifest, network: ShelbyNetworkId): unknown {
+  const registryAddress = aptosRegistryAddress(network);
+  if (!registryAddress) {
+    throw new Error(`Aptos registry address is not configured for ${network}.`);
+  }
+
+  return {
+    data: {
+      function: `${registryAddress}::yora_registry::mark_released`,
+      typeArguments: [],
+      functionArguments: [registryAddress, textBytes(capsule.id)],
     },
   };
 }

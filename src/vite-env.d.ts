@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   readonly VITE_YORA_KEY_RELEASE_URL?: string;
   readonly VITE_YORA_KEY_RELEASE_PUBLIC_KEY?: string;
   readonly VITE_YORA_REGISTRY_ADDRESS?: string;
+  readonly VITE_YORA_SHELBYNET_REGISTRY_ADDRESS?: string;
+  readonly VITE_YORA_TESTNET_REGISTRY_ADDRESS?: string;
   readonly VITE_YORA_NETWORK?: "testnet" | "shelbynet";
   readonly VITE_NORA_NETWORK?: "testnet" | "shelbynet";
 }

@@ -47,7 +47,12 @@ import { readBlob } from "./lib/storage";
 import { createShelbyClient, shelbyBlobUrl, SHELBY_NETWORKS } from "./lib/shelby";
 import { capsuleBlobName, discoverShelbyCapsules, encodeCapsuleEnvelope } from "./lib/shelbyCapsules";
 import { comparableAddress, sameAddress } from "./lib/address";
-import { buildRegisterCapsuleTransaction, isAptosRegistryEnabled, registryModeLabel } from "./lib/aptosRegistry";
+import {
+  buildMarkReleasedTransaction,
+  buildRegisterCapsuleTransaction,
+  isAptosRegistryEnabled,
+  registryModeLabel,
+} from "./lib/aptosRegistry";
 
 const DEFAULT_UNLOCK = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
 const SHELBY_EXPLORER_BASE_URL = "https://explorer.shelby.xyz";
@@ -428,11 +433,11 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       return;
     }
 
-    if (isAptosRegistryEnabled()) {
+    if (isAptosRegistryEnabled(selectedNetwork)) {
       try {
         setSealStep("registry");
         setActivity("Approve the Aptos registry transaction...");
-        await wallet.signAndSubmitTransaction(buildRegisterCapsuleTransaction(manifest) as never);
+        await wallet.signAndSubmitTransaction(buildRegisterCapsuleTransaction(manifest, selectedNetwork) as never);
         setActivity("Aptos registry recorded the capsule metadata.");
       } catch (error) {
         const message = error instanceof Error ? error.message : "Aptos registry did not accept the capsule metadata.";
@@ -544,7 +549,17 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       setCapsules((current) =>
         current.map((item) => (item.id === capsule.id ? { ...item, status: "opened" } : item)),
       );
-      setActivity("Capsule unsealed after recipient approval.");
+      if (isAptosRegistryEnabled(selectedNetwork) && wallet.signAndSubmitTransaction) {
+        try {
+          setActivity("Recording the release marker on Aptos...");
+          await wallet.signAndSubmitTransaction(buildMarkReleasedTransaction(capsule, selectedNetwork) as never);
+          setActivity("Capsule unsealed and release marker recorded.");
+        } catch {
+          setActivity("Capsule unsealed. Aptos release marker was skipped.");
+        }
+      } else {
+        setActivity("Capsule unsealed after recipient approval.");
+      }
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : "This capsule is not ready to unseal.";
       const message =
@@ -575,7 +590,11 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
     { label: "Shelby", value: uploadBlobs.isPending ? "Uploading" : networkConfig.shortLabel, tone: uploadBlobs.isPending ? "busy" : "good" },
     { label: "Blobs", value: "Shelby only", tone: "good" },
     { label: "Keys", value: isRemoteKeyReleaseEnabled() ? "Remote" : "Dev vault", tone: isRemoteKeyReleaseEnabled() ? "good" : "idle" },
-    { label: "Registry", value: isAptosRegistryEnabled() ? "Aptos" : "Optional", tone: isAptosRegistryEnabled() ? "good" : "idle" },
+    {
+      label: "Registry",
+      value: isAptosRegistryEnabled(selectedNetwork) ? "Aptos" : "Optional",
+      tone: isAptosRegistryEnabled(selectedNetwork) ? "good" : "idle",
+    },
   ];
 
   const sealSteps: Array<[SealStep, string]> = [
@@ -938,7 +957,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                   </div>
                   <div>
                     <dt>Registry</dt>
-                    <dd>{registryModeLabel()}</dd>
+                    <dd>{registryModeLabel(selectedNetwork)}</dd>
                   </div>
                 </dl>
               </aside>
@@ -1454,7 +1473,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 </div>
                 <div>
                   <dt>Registry</dt>
-                  <dd>{registryModeLabel()}</dd>
+                  <dd>{registryModeLabel(selectedNetwork)}</dd>
                 </div>
                 <div>
                   <dt>Total payload</dt>
