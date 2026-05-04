@@ -1,5 +1,6 @@
 import { base64ToBytes, bytesToBase64 } from "./bytes";
 import type { CapsuleManifest } from "../types";
+import { comparableAddress, sameAddress } from "./address";
 
 const STORE_KEY = "yora:key-release:v1";
 const LEGACY_STORE_KEY = "nora:key-release:v1";
@@ -148,7 +149,7 @@ export async function escrowKey(params: {
   const keys = readKeys().filter((key) => key.keyId !== params.keyId);
   keys.push({
     keyId: params.keyId,
-    recipient: params.recipient.toLowerCase(),
+    recipient: comparableAddress(params.recipient),
     unlockAt: params.unlockAt,
     key: bytesToBase64(params.keyBytes),
   });
@@ -199,8 +200,12 @@ export async function releaseKey(params: {
   }
 
   const found = readKeys().find((key) => key.keyId === params.keyId);
-  if (!found) throw new Error("The release key is not available on this device.");
-  if (found.recipient !== params.recipient.toLowerCase()) {
+  if (!found) {
+    throw new Error(
+      "The release key is not available in this browser. Enable the remote key-release service, or unseal from the same browser session that sealed this capsule.",
+    );
+  }
+  if (!sameAddress(found.recipient, params.recipient)) {
     throw new Error("Connect the recipient wallet for this capsule.");
   }
   if ((params.now ?? Date.now()) < found.unlockAt) {

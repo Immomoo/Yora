@@ -2270,6 +2270,19 @@ dd {
   text-decoration: none;
 }
 
+.issue-modal {
+  border-color: color-mix(in oklch, var(--rust), var(--ink) 52%);
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--rust), transparent 88%), transparent 52%),
+    var(--surface);
+}
+
+.issue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
 /* ─── Keyframes ──────────────────────────────────────────── */
 @keyframes turn { to { transform: rotate(360deg); } }
 

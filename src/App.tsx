@@ -171,6 +171,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
     mimeType?: string;
     payloadKind: "message" | "file";
   } | null>(null);
+  const [unsealIssue, setUnsealIssue] = useState<{ title: string; message: string } | null>(null);
   const [selectedCapsule, setSelectedCapsule] = useState<CapsuleManifest | null>(null);
   const [sealStep, setSealStep] = useState<SealStep>("idle");
   const [walletPickerOpen, setWalletPickerOpen] = useState(false);
@@ -443,10 +444,15 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
     if (!connectedAddress) {
       setActivity("Connect the recipient wallet to unseal this capsule.");
       setLastError("Only the recipient wallet can approve and decrypt this capsule.");
+      setUnsealIssue({
+        title: "Recipient wallet required",
+        message: "Connect the wallet that matches this capsule recipient before unsealing.",
+      });
       return;
     }
     try {
       setLastError(null);
+      setUnsealIssue(null);
       setOpeningCapsuleId(capsule.id);
       setActivity("Requesting recipient wallet approval...");
       const releaseTimestamp = Date.now();
@@ -498,6 +504,10 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       const message = error instanceof Error ? error.message : "This capsule is not ready to unseal.";
       setLastError(message);
       setActivity(message);
+      setUnsealIssue({
+        title: "Unseal did not complete",
+        message,
+      });
     } finally {
       setOpeningCapsuleId(null);
     }
@@ -1481,6 +1491,30 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 </a>
               </div>
             )}
+          </div>
+        </section>
+      )}
+
+      {unsealIssue && (
+        <section className="opened-backdrop" aria-live="polite" onClick={() => setUnsealIssue(null)}>
+          <div className="opened-modal issue-modal" role="alertdialog" aria-modal="true" aria-label="Unseal issue" onClick={(event) => event.stopPropagation()}>
+            <button className="drawer-close" onClick={() => setUnsealIssue(null)} aria-label="Close unseal issue">
+              <X size={17} />
+            </button>
+            <p className="eyebrow">Unseal status</p>
+            <h2>{unsealIssue.title}</h2>
+            <div className="opened-content">
+              <p>{unsealIssue.message}</p>
+            </div>
+            <div className="issue-actions">
+              <button className="ghost-button" onClick={() => setUnsealIssue(null)}>
+                Close
+              </button>
+              <button className="secondary" onClick={openWalletPicker}>
+                <Wallet size={16} />
+                Check wallet
+              </button>
+            </div>
           </div>
         </section>
       )}
