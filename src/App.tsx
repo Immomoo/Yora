@@ -164,7 +164,13 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
   });
   const [mode, setMode] = useState<"message" | "file">("message");
   const [activity, setActivity] = useState("Ready to write an encrypted capsule to Shelby.");
-  const [opened, setOpened] = useState<{ title: string; text?: string; url?: string } | null>(null);
+  const [opened, setOpened] = useState<{
+    title: string;
+    text?: string;
+    url?: string;
+    mimeType?: string;
+    payloadKind: "message" | "file";
+  } | null>(null);
   const [selectedCapsule, setSelectedCapsule] = useState<CapsuleManifest | null>(null);
   const [sealStep, setSealStep] = useState<SealStep>("idle");
   const [walletPickerOpen, setWalletPickerOpen] = useState(false);
@@ -468,11 +474,22 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       const plaintext = await decryptPayload(ciphertext, key, new Uint8Array(capsule.iv.split(",").map(Number)));
 
       if (capsule.payloadKind === "message") {
-        setOpened({ title: capsule.title, text: new TextDecoder().decode(plaintext) });
+        setOpened({
+          title: capsule.title,
+          text: new TextDecoder().decode(plaintext),
+          mimeType: capsule.mimeType,
+          payloadKind: "message",
+        });
       } else {
         const blob = new Blob([bytesToBlobPart(plaintext)], { type: capsule.mimeType });
-        setOpened({ title: capsule.title, url: URL.createObjectURL(blob) });
+        setOpened({
+          title: capsule.title,
+          url: URL.createObjectURL(blob),
+          mimeType: capsule.mimeType,
+          payloadKind: "file",
+        });
       }
+      setSelectedCapsule(null);
       setCapsules((current) =>
         current.map((item) => (item.id === capsule.id ? { ...item, status: "opened" } : item)),
       );
@@ -1434,12 +1451,37 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       {walletPicker}
 
       {opened && (
-        <section className="opened" aria-live="polite">
-          <button onClick={() => setOpened(null)} aria-label="Close unsealed capsule">
-            Close
-          </button>
-          <h2>{opened.title}</h2>
-          {opened.text ? <p>{opened.text}</p> : <a href={opened.url} download>Download unsealed file</a>}
+        <section className="opened-backdrop" aria-live="polite" onClick={() => setOpened(null)}>
+          <div className="opened-modal" role="dialog" aria-modal="true" aria-label="Unsealed capsule" onClick={(event) => event.stopPropagation()}>
+            <button className="drawer-close" onClick={() => setOpened(null)} aria-label="Close unsealed capsule">
+              <X size={17} />
+            </button>
+            <p className="eyebrow">Unsealed capsule</p>
+            <h2>{opened.title}</h2>
+            {opened.payloadKind === "message" ? (
+              <div className="opened-content">
+                <p>{opened.text ?? ""}</p>
+              </div>
+            ) : (
+              <div className="opened-content file-preview">
+                {opened.mimeType?.startsWith("image/") && opened.url ? (
+                  <img src={opened.url} alt={`Unsealed file from ${opened.title}`} />
+                ) : opened.mimeType === "application/pdf" && opened.url ? (
+                  <iframe src={opened.url} title={`Unsealed PDF from ${opened.title}`} />
+                ) : opened.mimeType?.startsWith("audio/") && opened.url ? (
+                  <audio src={opened.url} controls />
+                ) : opened.mimeType?.startsWith("video/") && opened.url ? (
+                  <video src={opened.url} controls />
+                ) : (
+                  <p>This file type is ready to download.</p>
+                )}
+                <a className="primary download-file" href={opened.url} download>
+                  <ArrowDownToLine size={16} />
+                  Download unsealed file
+                </a>
+              </div>
+            )}
+          </div>
         </section>
       )}
     </main>

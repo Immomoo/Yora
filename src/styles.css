@@ -2192,36 +2192,83 @@ dd {
   max-width: 230px;
 }
 
-/* ─── Opened capsule toast ───────────────────────────────── */
-.opened {
+/* ─── Opened capsule modal ───────────────────────────────── */
+.opened-backdrop {
   position: fixed;
-  right: var(--space-xl);
-  bottom: var(--space-xl);
-  z-index: 20;
-  width: min(500px, calc(100% - 32px));
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: var(--space-lg);
+  background: oklch(17% 0.024 70 / 0.34);
+  backdrop-filter: blur(10px);
+  animation: fadeIn 180ms var(--ease-out);
+}
+
+.opened-modal {
+  position: relative;
+  width: min(720px, 100%);
+  max-height: min(760px, calc(100dvh - 32px));
   display: grid;
   gap: var(--space-lg);
-  padding: var(--space-xl);
+  overflow: auto;
+  padding: clamp(22px, 3vw, 34px);
   border: 1px solid color-mix(in oklch, var(--green), var(--ink) 56%);
   border-radius: var(--radius);
-  background: var(--surface);
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--green-soft), transparent 55%), transparent 48%),
+    var(--surface);
   box-shadow: var(--shadow);
   animation: openedIn 320ms var(--ease-out);
 }
 
-.opened button {
-  justify-self: end;
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.86rem;
+.opened-modal h2 {
+  max-width: 15ch;
+  color: var(--charcoal);
+  font-size: clamp(2.4rem, 6vw, 4.3rem);
+  line-height: 0.9;
 }
 
-.opened button:hover { border-color: var(--rust); color: var(--rust-dark); }
-.opened p { color: var(--ink); line-height: 1.72; white-space: pre-wrap; }
-.opened a { color: var(--rust-dark); font-weight: 780; }
+.opened-content {
+  display: grid;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) - 4px);
+  background: color-mix(in oklch, var(--paper), var(--surface) 50%);
+}
+
+.opened-content p {
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.72;
+  white-space: pre-wrap;
+}
+
+.file-preview img,
+.file-preview iframe,
+.file-preview video {
+  width: 100%;
+  max-height: 420px;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) - 6px);
+  background: var(--paper);
+  object-fit: contain;
+}
+
+.file-preview iframe {
+  min-height: 420px;
+}
+
+.file-preview audio {
+  width: 100%;
+}
+
+.download-file {
+  width: fit-content;
+  min-height: 40px;
+  text-decoration: none;
+}
 
 /* ─── Keyframes ──────────────────────────────────────────── */
 @keyframes turn { to { transform: rotate(360deg); } }
