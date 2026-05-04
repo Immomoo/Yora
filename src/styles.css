@@ -720,6 +720,23 @@ p { color: var(--muted); }
   font-size: 0.96rem;
 }
 
+.transaction-row .receipt-cell strong {
+  overflow: hidden;
+  color: var(--charcoal);
+  font-family: "Geist Mono", monospace;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transaction-row .receipt-cell small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .copy-chip,
 .explorer-link {
   width: fit-content;
@@ -751,6 +768,37 @@ p { color: var(--muted); }
   border-color: color-mix(in oklch, var(--green), var(--line) 44%);
   background: color-mix(in oklch, var(--green-soft), var(--surface) 66%);
   color: var(--green);
+}
+
+.receipt-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.receipt-cell > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.receipt-cell strong,
+.receipt-cell small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.receipt-cell strong {
+  color: var(--charcoal);
+  font-family: "Geist Mono", monospace;
+  font-size: 0.68rem;
+}
+
+.receipt-cell small {
+  color: var(--muted);
+  font-size: 0.62rem;
 }
 
 /* ─── Monospace utilities ────────────────────────────────── */
@@ -1581,6 +1629,73 @@ textarea:focus {
   line-height: 1.45;
 }
 
+.storage-receipt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-md);
+  padding: 11px 12px;
+  border: 1px solid color-mix(in oklch, var(--green), var(--line) 50%);
+  border-radius: calc(var(--radius) - 4px);
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--green-soft), transparent 24%), transparent 74%),
+    color-mix(in oklch, var(--surface), transparent 12%);
+}
+
+.storage-receipt div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.storage-receipt span,
+.storage-receipt small {
+  overflow: hidden;
+  color: var(--muted);
+  font-family: "Geist Mono", monospace;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.storage-receipt strong {
+  overflow: hidden;
+  color: var(--green);
+  font-family: "Geist Mono", monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.receipt-action {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in oklch, var(--green), var(--line) 36%);
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--surface), var(--green-soft) 36%);
+  color: var(--green);
+  font-family: "Geist Mono", monospace;
+  font-size: 0.64rem;
+  font-weight: 800;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: transform 180ms var(--ease-out), border-color 180ms var(--ease-out), background 180ms var(--ease-out);
+}
+
+.receipt-action:hover {
+  transform: translateY(-1px);
+  border-color: var(--green);
+  background: var(--surface);
+}
+
 .card-top {
   display: flex;
   align-items: center;
@@ -1653,6 +1768,10 @@ textarea:focus {
 .status.shelby {
   color: var(--rust-dark);
   background: color-mix(in oklch, var(--amber), var(--surface) 82%);
+}
+
+.drawer-receipt {
+  margin: var(--space-lg) 0;
 }
 
 /* ─── Data lists ─────────────────────────────────────────── */
@@ -2311,6 +2430,15 @@ dd {
   }
   .landing-hero h1 { font-size: clamp(2.8rem, 15vw, 5rem); }
   .landing-proof { grid-template-columns: 1fr; }
+
+  .storage-receipt {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .receipt-action {
+    width: 100%;
+  }
 
   /* App */
   .app-shell {

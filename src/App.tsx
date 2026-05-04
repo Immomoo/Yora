@@ -94,6 +94,13 @@ function shortDigest(value: string): string {
   return value.length > 18 ? `${value.slice(0, 10)}...${value.slice(-6)}` : value;
 }
 
+function storageReceiptId(capsule: CapsuleManifest): string {
+  const route = (capsule.shelbyNetwork ?? "testnet").toUpperCase();
+  const digest = capsule.ciphertextDigest;
+  const suffix = digest.length > 12 ? `${digest.slice(0, 6)}-${digest.slice(-6)}` : digest;
+  return `YORA-${route}-${suffix.toUpperCase()}`;
+}
+
 function YoraMotionMark() {
   // Shelby Protocol logo — verified from official brand mark.
   // 3 identical pieces, each a wide chevron with:
@@ -1055,6 +1062,17 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                         <dd>{capsule.payloadKind} / {formatBytes(capsule.sizeBytes)}</dd>
                       </div>
                     </dl>
+                    <div className="storage-receipt">
+                      <div>
+                        <span>Stored on Shelby</span>
+                        <strong>{storageReceiptId(capsule)}</strong>
+                        <small>{formatCapsuleStorage(capsule)} / encrypted blob</small>
+                      </div>
+                      <a className="receipt-action" href={shelbyExplorerBlobUrl(capsule)} target="_blank" rel="noreferrer">
+                        <ExternalLink size={13} />
+                        Explorer
+                      </a>
+                    </div>
                     <div className="capsule-actions">
                       <button className="ghost-button" onClick={() => setSelectedCapsule(capsule)}>
                         <Layers3 size={16} />
@@ -1090,7 +1108,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               <div className="transaction-head">
                 <span>Status</span>
                 <span>Capsule</span>
-                <span>Network</span>
+                <span>Receipt</span>
                 <span>Blob</span>
                 <span>Digest</span>
                 <span>Explorer</span>
@@ -1104,7 +1122,13 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                       Sealed
                     </span>
                     <strong>{capsule.title}</strong>
-                    <span>{formatCapsuleStorage(capsule)}</span>
+                    <span className="receipt-cell">
+                      <Server size={13} />
+                      <span>
+                        <strong>{storageReceiptId(capsule)}</strong>
+                        <small>{formatCapsuleStorage(capsule)}</small>
+                      </span>
+                    </span>
                     <button className="copy-chip" onClick={() => void navigator.clipboard?.writeText(capsule.blobName)}>
                       <Copy size={13} />
                       Copy blob
@@ -1261,6 +1285,17 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 <Server size={13} />
                 {formatCapsuleStorage(selectedCapsule)}
               </span>
+            </div>
+            <div className="storage-receipt drawer-receipt">
+              <div>
+                <span>Shelby storage receipt</span>
+                <strong>{storageReceiptId(selectedCapsule)}</strong>
+                <small>{formatCapsuleStorage(selectedCapsule)} / encrypted blob</small>
+              </div>
+              <a className="receipt-action" href={shelbyExplorerBlobUrl(selectedCapsule)} target="_blank" rel="noreferrer">
+                <ExternalLink size={13} />
+                Open explorer
+              </a>
             </div>
             <div className="drawer-sections">
               <section>
