@@ -109,6 +109,15 @@ function storageReceiptId(capsule: CapsuleManifest): string {
   return `YORA-${route}-${suffix.toUpperCase()}`;
 }
 
+function formatShortDateTime(timestamp: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
+
 function YoraMotionMark() {
   // Shelby Protocol logo — verified from official brand mark.
   // 3 identical pieces, each a wide chevron with:
@@ -847,49 +856,78 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               </section>
             )}
 
-            <div className="hero-panel">
-              <div>
-                <p className="eyebrow">Vault overview</p>
-                <h2>Private capsules across Shelby networks.</h2>
-                <p>
-                  Track sent and received capsules, unlock windows, and Shelby storage status from one focused vault.
-                </p>
-              </div>
-              <div className="timepiece compact" aria-hidden="true">
-                <div className="orbit orbit-one" />
-                <div className="orbit orbit-two" />
-                <div className="dial">
-                  <KeyRound size={34} />
-                  <span>{readyCount}</span>
-                  <small>unlockable</small>
+            <section className="dashboard-overview">
+              <article className="hero-panel dashboard-hero-panel">
+                <div>
+                  <p className="eyebrow">Vault overview</p>
+                  <h2>Private capsules, ready when time allows.</h2>
+                  <p>
+                    Track incoming capsules, unlock windows, and Shelby-backed encrypted storage from one focused wallet view.
+                  </p>
+                  <div className="dashboard-actions">
+                    <button className="primary" onClick={() => setActivePage("create")}>
+                      <Plus size={16} />
+                      Create capsule
+                    </button>
+                    <button className="ghost-button" onClick={() => setActivePage("capsules")}>
+                      <Archive size={16} />
+                      Open vault
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </article>
 
-            <div className="metrics-grid">
+              <aside className="dashboard-status-card">
+                <div className="timepiece compact dashboard-timepiece" aria-hidden="true">
+                  <div className="orbit orbit-one" />
+                  <div className="orbit orbit-two" />
+                  <div className="dial">
+                    <KeyRound size={28} />
+                    <span>{readyCount}</span>
+                    <small>unlockable</small>
+                  </div>
+                </div>
+                <dl>
+                  <div>
+                    <dt>Route</dt>
+                    <dd>{networkConfig.shortLabel}</dd>
+                  </div>
+                  <div>
+                    <dt>Key release</dt>
+                    <dd>{keyReleaseModeLabel()}</dd>
+                  </div>
+                  <div>
+                    <dt>Registry</dt>
+                    <dd>{registryModeLabel()}</dd>
+                  </div>
+                </dl>
+              </aside>
+            </section>
+
+            <div className="metrics-grid dashboard-metrics">
               <article className="metric-card">
-                <Gauge size={20} />
+                <Gauge size={19} />
                 <span>{receivedCount}</span>
                 <p>Received</p>
               </article>
               <article className="metric-card">
-                <ArrowDownToLine size={20} />
+                <ArrowDownToLine size={19} />
                 <span>{formatBytes(totalBytes)}</span>
                 <p>Encrypted payload</p>
               </article>
               <article className="metric-card">
-                <Sparkles size={20} />
+                <Sparkles size={19} />
                 <span>{readyCount}</span>
-                <p>Unlockable now</p>
+                <p>Ready to unseal</p>
               </article>
               <article className="metric-card">
-                <Clock3 size={20} />
+                <Clock3 size={19} />
                 <span>{lockedCount}</span>
-                <p>Locked by time</p>
+                <p>Time locked</p>
               </article>
             </div>
 
-            <section className="panel recent-panel">
+            <section className="panel recent-panel dashboard-inbox-panel">
               <div className="section-heading">
                 <History size={22} />
                 <div>
@@ -897,15 +935,51 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                   <p>{receivedInbox.length ? "Capsules addressed to this wallet" : "No received capsules found"}</p>
                 </div>
               </div>
-              <div className="timeline-list">
+              <div className="dashboard-inbox-list">
                 {receivedInbox.length ? (
-                  receivedInbox.map((capsule) => (
-                    <article key={capsule.id}>
-                      <span>Received</span>
-                      <strong>{capsule.title}</strong>
-                      <p>From {formatAddress(capsule.creator)} / {formatCapsuleStorage(capsule)}</p>
-                    </article>
-                  ))
+                  receivedInbox.map((capsule) => {
+                    const locked = Date.now() < capsule.unlockAt;
+                    const opening = openingCapsuleId === capsule.id;
+                    return (
+                      <article className={`inbox-card ${locked ? "locked" : "ready"}`} key={capsule.id}>
+                        <div className="inbox-status">
+                          {locked ? <Clock3 size={15} /> : <Sparkles size={15} />}
+                          <span>{locked ? "Locked" : "Ready"}</span>
+                        </div>
+                        <div className="inbox-copy">
+                          <h3>{capsule.title}</h3>
+                          <p>
+                            From {formatAddress(capsule.creator)} on {formatCapsuleStorage(capsule)}
+                          </p>
+                        </div>
+                        <dl className="inbox-facts">
+                          <div>
+                            <dt>Unlock</dt>
+                            <dd>{formatShortDateTime(capsule.unlockAt)}</dd>
+                          </div>
+                          <div>
+                            <dt>Payload</dt>
+                            <dd>{capsule.payloadKind} / {formatBytes(capsule.sizeBytes)}</dd>
+                          </div>
+                        </dl>
+                        <div className="inbox-actions">
+                          <button className="ghost-button" onClick={() => setSelectedCapsule(capsule)}>
+                            <Layers3 size={15} />
+                            Details
+                          </button>
+                          <button
+                            className="secondary"
+                            onClick={() => void unsealCapsule(capsule)}
+                            disabled={locked || opening}
+                            title={locked ? "This capsule has not reached its unlock time." : undefined}
+                          >
+                            <CalendarClock size={15} />
+                            {opening ? "Approve" : "Unseal"}
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })
                 ) : (
                   <div className="empty-state slim">
                     <KeyRound size={24} />
