@@ -18,6 +18,8 @@ export interface CapsuleManifest {
   iv: string;
   keyId: string;
   ciphertextDigest: string;
+  registryTxHash?: string;
+  releaseTxHash?: string;
   status: CapsuleStatus;
   shelbyNetwork?: ShelbyNetworkId;
 }

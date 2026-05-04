@@ -962,6 +962,66 @@ p { color: var(--muted); }
   width: auto;
 }
 
+.capsule-receipt-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.45fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  border: 1px solid color-mix(in oklch, var(--green), var(--line) 38%);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--green-soft), var(--surface) 62%), transparent 72%),
+    color-mix(in oklch, var(--surface) 90%, transparent);
+  box-shadow: var(--shadow-soft);
+  animation: appReveal 360ms var(--ease-out) both;
+}
+
+.capsule-receipt-panel h3 {
+  color: var(--charcoal);
+  font-size: clamp(1.35rem, 2vw, 1.95rem);
+}
+
+.capsule-receipt-panel p:not(.eyebrow) {
+  max-width: 44ch;
+  margin-top: 5px;
+  line-height: 1.55;
+}
+
+.capsule-receipt-panel dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--space-lg);
+}
+
+.capsule-receipt-panel dl div {
+  min-height: 38px;
+}
+
+.capsule-receipt-panel dd {
+  overflow: hidden;
+  max-width: 230px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.receipt-actions,
+.unseal-receipt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.receipt-actions {
+  justify-content: end;
+}
+
+.receipt-actions .drawer-close {
+  width: 32px;
+  height: 32px;
+}
+
 .transaction-row .receipt-cell strong {
   overflow: hidden;
   color: var(--charcoal);
@@ -1470,6 +1530,7 @@ dt,
 
 .composer .section-heading,
 .composer .network-warning,
+.composer .registry-note,
 .composer .segmented,
 .composer .dropzone,
 .composer .primary,
@@ -1612,6 +1673,7 @@ textarea:focus {
 }
 
 .network-warning,
+.registry-note,
 .error-panel {
   display: grid;
   gap: var(--space-sm);
@@ -1627,10 +1689,23 @@ textarea:focus {
   align-items: center;
 }
 
+.registry-note {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  border-color: color-mix(in oklch, var(--green), var(--line) 36%);
+  background: color-mix(in oklch, var(--green-soft), var(--surface) 78%);
+  color: var(--green);
+}
+
 .network-warning span,
+.registry-note span,
 .error-panel p {
   color: color-mix(in oklch, var(--clay), var(--ink) 36%);
   line-height: 1.5;
+}
+
+.registry-note span {
+  color: color-mix(in oklch, var(--green), var(--ink) 26%);
 }
 
 .error-panel strong {
@@ -2487,6 +2562,11 @@ dd {
   white-space: pre-wrap;
 }
 
+.unseal-receipt {
+  padding-top: var(--space-md);
+  border-top: 1px solid color-mix(in oklch, var(--line), transparent 25%);
+}
+
 .file-preview img,
 .file-preview iframe,
 .file-preview video {
@@ -2671,6 +2751,7 @@ dd {
   .flow-panel > div,
   .hero-panel,
   .dashboard-overview,
+  .capsule-receipt-panel,
   .landing-proof,
   .assurance,
   .wallet-state,
@@ -2700,6 +2781,14 @@ dd {
   }
 
   .inbox-actions {
+    justify-content: start;
+  }
+
+  .capsule-receipt-panel dl {
+    grid-template-columns: 1fr;
+  }
+
+  .receipt-actions {
     justify-content: start;
   }
 }

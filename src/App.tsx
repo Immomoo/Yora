@@ -58,9 +58,21 @@ const DEFAULT_UNLOCK = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().
 const SHELBY_EXPLORER_BASE_URL = "https://explorer.shelby.xyz";
 const RUNTIME_VERSION = "shelby-index-v3";
 const OPENED_CAPSULES_KEY = "yora:opened-capsules:v1";
+const CAPSULE_RECEIPTS_KEY = "yora:capsule-receipts:v1";
 
 type Page = "landing" | "dashboard" | "create" | "capsules" | "transactions" | "profile";
 type SealStep = "idle" | "encrypting" | "approving" | "uploading" | "registry" | "escrow" | "sealed" | "error";
+
+interface CapsuleReceipt {
+  capsuleId: string;
+  registryTxHash?: string;
+  releaseTxHash?: string;
+}
+
+interface SealReceipt {
+  capsule: CapsuleManifest;
+  registryStatus: "recorded" | "optional" | "skipped";
+}
 
 interface AppProps {
   selectedNetwork: ShelbyNetworkId;
@@ -93,6 +105,10 @@ function capsuleCountLabel(count: number): string {
 function shelbyExplorerBlobUrl(capsule: CapsuleManifest): string {
   const network = capsule.shelbyNetwork ?? "testnet";
   return `${SHELBY_EXPLORER_BASE_URL}/${network}/blobs/${capsule.creator}?blobName=${encodeURIComponent(capsule.blobName)}`;
+}
+
+function aptosExplorerTxUrl(hash: string, network: ShelbyNetworkId): string {
+  return `https://explorer.aptoslabs.com/txn/${hash}?network=${network === "shelbynet" ? "shelbynet" : "testnet"}`;
 }
 
 function isWalletOnSelectedNetwork(walletNetworkName: string, selectedNetwork: ShelbyNetworkId): boolean {
@@ -140,6 +156,37 @@ function readOpenedCapsuleIds(): string[] {
 
 function writeOpenedCapsuleIds(ids: string[]): void {
   localStorage.setItem(OPENED_CAPSULES_KEY, JSON.stringify(ids));
+}
+
+function readCapsuleReceipts(): CapsuleReceipt[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CAPSULE_RECEIPTS_KEY) || "[]") as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is CapsuleReceipt => {
+      return Boolean(item && typeof item === "object" && typeof (item as CapsuleReceipt).capsuleId === "string");
+    }) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCapsuleReceipts(receipts: CapsuleReceipt[]): void {
+  localStorage.setItem(CAPSULE_RECEIPTS_KEY, JSON.stringify(receipts));
+}
+
+function getTransactionHash(response: unknown): string | undefined {
+  if (!response || typeof response !== "object") return undefined;
+  const value = response as Record<string, unknown>;
+  const candidates = [
+    value.hash,
+    value.transactionHash,
+    value.txHash,
+    value.transaction_hash,
+    value.pendingTransaction && typeof value.pendingTransaction === "object"
+      ? (value.pendingTransaction as Record<string, unknown>).hash
+      : undefined,
+  ];
+  const found = candidates.find((candidate) => typeof candidate === "string" && candidate.length > 0);
+  return typeof found === "string" ? found : undefined;
 }
 
 function YoraMotionMark() {
@@ -204,6 +251,8 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
     mimeType?: string;
     fileName?: string;
     payloadKind: "message" | "file";
+    releaseMarkerStatus?: "pending" | "recorded" | "skipped";
+    releaseTxHash?: string;
   } | null>(null);
   const [unsealIssue, setUnsealIssue] = useState<{ title: string; message: string } | null>(null);
   const [selectedCapsule, setSelectedCapsule] = useState<CapsuleManifest | null>(null);
@@ -212,6 +261,8 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
   const [lastError, setLastError] = useState<string | null>(null);
   const [openingCapsuleId, setOpeningCapsuleId] = useState<string | null>(null);
   const [openedCapsuleIds, setOpenedCapsuleIds] = useState<string[]>(() => readOpenedCapsuleIds());
+  const [capsuleReceipts, setCapsuleReceipts] = useState<CapsuleReceipt[]>(() => readCapsuleReceipts());
+  const [lastSealReceipt, setLastSealReceipt] = useState<SealReceipt | null>(null);
   const [isIndexLoading, setIsIndexLoading] = useState(false);
   const [indexError, setIndexError] = useState<string | null>(null);
   const [capsuleScope, setCapsuleScope] = useState("");
@@ -259,6 +310,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
     wallet.connected &&
     Boolean(walletNetworkName) &&
     !isWalletOnSelectedNetwork(walletNetworkName, selectedNetwork);
+  const capsuleReceiptMap = useMemo(() => new Map(capsuleReceipts.map((receipt) => [receipt.capsuleId, receipt])), [capsuleReceipts]);
 
   const uploadBlobs = useUploadBlobs({
     client: shelbyClient,
@@ -279,6 +331,28 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       writeOpenedCapsuleIds(next);
       return next;
     });
+  }
+
+  function rememberCapsuleReceipt(receipt: CapsuleReceipt): void {
+    setCapsuleReceipts((current) => {
+      const existing = current.find((item) => item.capsuleId === receipt.capsuleId);
+      const merged = {
+        ...existing,
+        ...receipt,
+      };
+      const next = [merged, ...current.filter((item) => item.capsuleId !== receipt.capsuleId)].slice(0, 500);
+      writeCapsuleReceipts(next);
+      return next;
+    });
+  }
+
+  function withLocalReceipt(capsule: CapsuleManifest): CapsuleManifest {
+    const receipt = capsuleReceiptMap.get(capsule.id);
+    return receipt ? { ...capsule, ...receipt } : capsule;
+  }
+
+  function copyToClipboard(value: string): void {
+    void navigator.clipboard?.writeText(value);
   }
 
   useEffect(() => {
@@ -325,11 +399,15 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
           account: connectedAddress,
           network: selectedNetwork,
         });
+        const hydratedCapsules = indexedCapsules.map((capsule) => {
+          const receipt = readCapsuleReceipts().find((item) => item.capsuleId === capsule.id);
+          return receipt ? { ...capsule, ...receipt } : capsule;
+        });
         if (!cancelled) {
           setCapsuleScope(currentScope);
-          setCapsules(indexedCapsules);
-          setIndexStatus(`Loaded ${capsuleCountLabel(indexedCapsules.length)} from Shelby for ${formatAddress(connectedAddress)}.`);
-          setActivity(`Loaded ${capsuleCountLabel(indexedCapsules.length)} from Shelby for this wallet.`);
+          setCapsules(hydratedCapsules);
+          setIndexStatus(`Loaded ${capsuleCountLabel(hydratedCapsules.length)} from Shelby for ${formatAddress(connectedAddress)}.`);
+          setActivity(`Loaded ${capsuleCountLabel(hydratedCapsules.length)} from Shelby for this wallet.`);
         }
       } catch (error) {
         if (!cancelled) {
@@ -444,11 +522,13 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       return;
     }
 
+    let registryTxHash: string | undefined;
     if (isAptosRegistryEnabled(selectedNetwork)) {
       try {
         setSealStep("registry");
         setActivity("Approve the Aptos registry transaction...");
-        await wallet.signAndSubmitTransaction(buildRegisterCapsuleTransaction(manifest, selectedNetwork) as never);
+        const registryResponse = await wallet.signAndSubmitTransaction(buildRegisterCapsuleTransaction(manifest, selectedNetwork) as never);
+        registryTxHash = getTransactionHash(registryResponse);
         setActivity("Aptos registry recorded the capsule metadata.");
       } catch (error) {
         const message = error instanceof Error ? error.message : "Aptos registry did not accept the capsule metadata.";
@@ -492,10 +572,18 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       setActivity(`Key escrow failed: ${message}`);
       return;
     }
+    const finalManifest: CapsuleManifest = registryTxHash ? { ...manifest, registryTxHash } : manifest;
+    if (registryTxHash) {
+      rememberCapsuleReceipt({ capsuleId: finalManifest.id, registryTxHash });
+    }
     setCapsuleScope(currentScope);
-    setCapsules((current) => [manifest, ...current.filter((capsule) => capsule.id !== manifest.id)]);
+    setCapsules((current) => [finalManifest, ...current.filter((capsule) => capsule.id !== finalManifest.id)]);
     setActivePage("capsules");
-    setSelectedCapsule(manifest);
+    setSelectedCapsule(finalManifest);
+    setLastSealReceipt({
+      capsule: finalManifest,
+      registryStatus: isAptosRegistryEnabled(selectedNetwork) ? "recorded" : "optional",
+    });
     setSealStep("sealed");
     setActivity("Capsule sealed and written to Shelby.");
   }
@@ -545,6 +633,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
           text: new TextDecoder().decode(plaintext),
           mimeType: capsule.mimeType,
           payloadKind: "message",
+          releaseMarkerStatus: isAptosRegistryEnabled(selectedNetwork) ? "pending" : "skipped",
         });
       } else {
         const blob = new Blob([bytesToBlobPart(plaintext)], { type: capsule.mimeType });
@@ -554,6 +643,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
           mimeType: capsule.mimeType,
           fileName: capsule.fileName,
           payloadKind: "file",
+          releaseMarkerStatus: isAptosRegistryEnabled(selectedNetwork) ? "pending" : "skipped",
         });
       }
       setSelectedCapsule(null);
@@ -564,9 +654,33 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       if (isAptosRegistryEnabled(selectedNetwork) && wallet.signAndSubmitTransaction) {
         try {
           setActivity("Recording the release marker on Aptos...");
-          await wallet.signAndSubmitTransaction(buildMarkReleasedTransaction(capsule, selectedNetwork) as never);
+          const releaseResponse = await wallet.signAndSubmitTransaction(buildMarkReleasedTransaction(capsule, selectedNetwork) as never);
+          const releaseTxHash = getTransactionHash(releaseResponse);
+          if (releaseTxHash) {
+            rememberCapsuleReceipt({ capsuleId: capsule.id, releaseTxHash });
+            setCapsules((current) =>
+              current.map((item) => (item.id === capsule.id ? { ...item, releaseTxHash, status: "opened" } : item)),
+            );
+          }
+          setOpened((current) =>
+            current
+              ? {
+                  ...current,
+                  releaseMarkerStatus: "recorded",
+                  releaseTxHash,
+                }
+              : current,
+          );
           setActivity("Capsule unsealed and release marker recorded.");
         } catch {
+          setOpened((current) =>
+            current
+              ? {
+                  ...current,
+                  releaseMarkerStatus: "skipped",
+                }
+              : current,
+          );
           setActivity("Capsule unsealed. Aptos release marker was skipped.");
         }
       } else {
@@ -910,10 +1024,14 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                       network: selectedNetwork,
                     })
                       .then((indexedCapsules) => {
+                        const hydratedCapsules = indexedCapsules.map((capsule) => {
+                          const receipt = readCapsuleReceipts().find((item) => item.capsuleId === capsule.id);
+                          return receipt ? { ...capsule, ...receipt } : capsule;
+                        });
                         setCapsuleScope(currentScope);
-                        setCapsules(indexedCapsules);
-                        setIndexStatus(`Loaded ${capsuleCountLabel(indexedCapsules.length)} from Shelby for ${formatAddress(connectedAddress)}.`);
-                        setActivity(`Loaded ${capsuleCountLabel(indexedCapsules.length)} from Shelby for this wallet.`);
+                        setCapsules(hydratedCapsules);
+                        setIndexStatus(`Loaded ${capsuleCountLabel(hydratedCapsules.length)} from Shelby for ${formatAddress(connectedAddress)}.`);
+                        setActivity(`Loaded ${capsuleCountLabel(hydratedCapsules.length)} from Shelby for this wallet.`);
                       })
                       .catch((error) => {
                         setIndexError(error instanceof Error ? error.message : "Yora could not load capsules from Shelby.");
@@ -1085,6 +1203,15 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                   <span>Your wallet is on {walletNetworkName}. Yora is set to {networkConfig.shortLabel}.</span>
                 </div>
               )}
+              {isAptosRegistryEnabled(selectedNetwork) && (
+                <div className="registry-note" role="status">
+                  <ShieldCheck size={17} />
+                  <span>
+                    Aptos registry is active on {networkConfig.shortLabel}. After Shelby accepts the encrypted blob,
+                    Yora will ask for a registry approval to record capsule metadata on-chain.
+                  </span>
+                </div>
+              )}
 
               <label>
                 Capsule name
@@ -1253,6 +1380,60 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               </article>
             </div>
 
+            {lastSealReceipt && (
+              <section className="capsule-receipt-panel" aria-label="Latest capsule receipt">
+                <div>
+                  <p className="eyebrow">Capsule sealed</p>
+                  <h3>{lastSealReceipt.capsule.title}</h3>
+                  <p>
+                    Encrypted payload stored on Shelby. Recipient access is gated by wallet and unlock time.
+                  </p>
+                </div>
+                <dl>
+                  <div>
+                    <dt>Recipient</dt>
+                    <dd>{formatAddress(lastSealReceipt.capsule.recipient)}</dd>
+                  </div>
+                  <div>
+                    <dt>Unlock</dt>
+                    <dd>{formatShortDateTime(lastSealReceipt.capsule.unlockAt)}</dd>
+                  </div>
+                  <div>
+                    <dt>Shelby receipt</dt>
+                    <dd>{storageReceiptId(lastSealReceipt.capsule)}</dd>
+                  </div>
+                  <div>
+                    <dt>Registry</dt>
+                    <dd>{lastSealReceipt.registryStatus === "recorded" ? "Recorded on Aptos" : "Optional"}</dd>
+                  </div>
+                </dl>
+                <div className="receipt-actions">
+                  <a className="receipt-action" href={shelbyExplorerBlobUrl(lastSealReceipt.capsule)} target="_blank" rel="noreferrer">
+                    <ExternalLink size={13} />
+                    Shelby blob
+                  </a>
+                  {lastSealReceipt.capsule.registryTxHash && (
+                    <a
+                      className="receipt-action"
+                      href={aptosExplorerTxUrl(lastSealReceipt.capsule.registryTxHash, lastSealReceipt.capsule.shelbyNetwork ?? selectedNetwork)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <ExternalLink size={13} />
+                      Registry tx
+                    </a>
+                  )}
+                  <button className="copy-chip" onClick={() => copyToClipboard(lastSealReceipt.capsule.ciphertextDigest)}>
+                    <Copy size={13} />
+                    Copy digest
+                  </button>
+                  <button className="drawer-close" onClick={() => setLastSealReceipt(null)} aria-label="Dismiss receipt">
+                    <X size={15} />
+                  </button>
+                </div>
+              </section>
+            )}
+
             <div className="cards">
               {!visibleCapsules.length && (
                 <div className="capsule-empty-shell">
@@ -1272,7 +1453,8 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                   </div>
                 </div>
               )}
-              {visibleCapsules.map((capsule) => {
+              {visibleCapsules.map((rawCapsule) => {
+                const capsule = withLocalReceipt(rawCapsule);
                 const isRecipient = sameAddress(capsule.recipient, connectedAddress);
                 const isCreator = sameAddress(capsule.creator, connectedAddress);
                 const locked = Date.now() < capsule.unlockAt;
@@ -1323,6 +1505,17 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                         <ExternalLink size={13} />
                         Explorer
                       </a>
+                      {capsule.registryTxHash && (
+                        <a
+                          className="receipt-action"
+                          href={aptosExplorerTxUrl(capsule.registryTxHash, capsule.shelbyNetwork ?? selectedNetwork)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <ExternalLink size={13} />
+                          Registry
+                        </a>
+                      )}
                     </div>
                     <div className="capsule-actions">
                       <button className="ghost-button" onClick={() => setSelectedCapsule(capsule)}>
@@ -1362,38 +1555,50 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 <span>Receipt</span>
                 <span>Blob</span>
                 <span>Digest</span>
-                <span>Explorer</span>
+                <span>Registry</span>
                 <span>Time</span>
               </div>
               {transactionCapsules.length ? (
-                transactionCapsules.map((capsule) => (
-                  <article key={capsule.id} className="transaction-row">
-                    <span className="status ready">
-                      <Check size={13} />
-                      Sealed
-                    </span>
-                    <strong>{capsule.title}</strong>
-                    <span className="receipt-cell">
-                      <Server size={13} />
-                      <span>
-                        <strong>{storageReceiptId(capsule)}</strong>
-                        <small>{formatCapsuleStorage(capsule)}</small>
+                transactionCapsules.map((rawCapsule) => {
+                  const capsule = withLocalReceipt(rawCapsule);
+                  return (
+                    <article key={capsule.id} className="transaction-row">
+                      <span className="status ready">
+                        <Check size={13} />
+                        Sealed
                       </span>
-                    </span>
-                    <button className="copy-chip" onClick={() => void navigator.clipboard?.writeText(capsule.blobName)}>
-                      <Copy size={13} />
-                      Copy blob
-                    </button>
-                    <button className="copy-chip" onClick={() => void navigator.clipboard?.writeText(capsule.ciphertextDigest)}>
-                      {shortDigest(capsule.ciphertextDigest)}
-                    </button>
-                    <a className="explorer-link" href={shelbyExplorerBlobUrl(capsule)} target="_blank" rel="noreferrer">
-                      <ExternalLink size={13} />
-                      Explorer
-                    </a>
-                    <time>{new Date(capsule.createdAt).toLocaleString()}</time>
-                  </article>
-                ))
+                      <strong>{capsule.title}</strong>
+                      <span className="receipt-cell">
+                        <Server size={13} />
+                        <span>
+                          <strong>{storageReceiptId(capsule)}</strong>
+                          <small>{formatCapsuleStorage(capsule)}</small>
+                        </span>
+                      </span>
+                      <a className="explorer-link" href={shelbyExplorerBlobUrl(capsule)} target="_blank" rel="noreferrer">
+                        <ExternalLink size={13} />
+                        Shelby
+                      </a>
+                      <button className="copy-chip" onClick={() => copyToClipboard(capsule.ciphertextDigest)}>
+                        {shortDigest(capsule.ciphertextDigest)}
+                      </button>
+                      {capsule.registryTxHash ? (
+                        <a
+                          className="explorer-link"
+                          href={aptosExplorerTxUrl(capsule.registryTxHash, capsule.shelbyNetwork ?? selectedNetwork)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <ExternalLink size={13} />
+                          Aptos
+                        </a>
+                      ) : (
+                        <span>Optional</span>
+                      )}
+                      <time>{new Date(capsule.createdAt).toLocaleString()}</time>
+                    </article>
+                  );
+                })
               ) : (
                 <div className="empty-state slim">
                   <History size={24} />
@@ -1555,6 +1760,17 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 <ExternalLink size={13} />
                 Open explorer
               </a>
+              {withLocalReceipt(selectedCapsule).registryTxHash && (
+                <a
+                  className="receipt-action"
+                  href={aptosExplorerTxUrl(withLocalReceipt(selectedCapsule).registryTxHash ?? "", selectedCapsule.shelbyNetwork ?? selectedNetwork)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <ExternalLink size={13} />
+                  Registry tx
+                </a>
+              )}
             </div>
             <div className="drawer-sections">
               <section>
@@ -1584,6 +1800,14 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                   <div>
                     <dt>Blob name</dt>
                     <dd>{selectedCapsule.blobName}</dd>
+                  </div>
+                  <div>
+                    <dt>Registry tx</dt>
+                    <dd>{withLocalReceipt(selectedCapsule).registryTxHash ? shortDigest(withLocalReceipt(selectedCapsule).registryTxHash ?? "") : "Optional"}</dd>
+                  </div>
+                  <div>
+                    <dt>Release tx</dt>
+                    <dd>{withLocalReceipt(selectedCapsule).releaseTxHash ? shortDigest(withLocalReceipt(selectedCapsule).releaseTxHash ?? "") : "Not recorded"}</dd>
                   </div>
                 </dl>
               </section>
@@ -1650,6 +1874,22 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 </a>
               </div>
             )}
+            <div className="unseal-receipt">
+              <span className={`status ${opened.releaseMarkerStatus === "recorded" ? "ready" : "locked"}`}>
+                {opened.releaseMarkerStatus === "recorded" ? <Check size={13} /> : <Clock3 size={13} />}
+                {opened.releaseMarkerStatus === "pending"
+                  ? "Recording release marker"
+                  : opened.releaseMarkerStatus === "recorded"
+                    ? "Release marker recorded"
+                    : "Release marker skipped"}
+              </span>
+              {opened.releaseTxHash && (
+                <a className="receipt-action" href={aptosExplorerTxUrl(opened.releaseTxHash, selectedNetwork)} target="_blank" rel="noreferrer">
+                  <ExternalLink size={13} />
+                  Release tx
+                </a>
+              )}
+            </div>
           </div>
         </section>
       )}
