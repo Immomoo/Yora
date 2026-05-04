@@ -52,6 +52,7 @@ import { buildRegisterCapsuleTransaction, isAptosRegistryEnabled, registryModeLa
 const DEFAULT_UNLOCK = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
 const SHELBY_EXPLORER_BASE_URL = "https://explorer.shelby.xyz";
 const RUNTIME_VERSION = "shelby-index-v3";
+const OPENED_CAPSULES_KEY = "yora:opened-capsules:v1";
 
 type Page = "landing" | "dashboard" | "create" | "capsules" | "transactions" | "profile";
 type SealStep = "idle" | "encrypting" | "approving" | "uploading" | "registry" | "escrow" | "sealed" | "error";
@@ -116,6 +117,19 @@ function formatShortDateTime(timestamp: number): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(timestamp));
+}
+
+function readOpenedCapsuleIds(): string[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(OPENED_CAPSULES_KEY) || "[]") as unknown;
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeOpenedCapsuleIds(ids: string[]): void {
+  localStorage.setItem(OPENED_CAPSULES_KEY, JSON.stringify(ids));
 }
 
 function YoraMotionMark() {
@@ -186,6 +200,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
   const [walletPickerOpen, setWalletPickerOpen] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [openingCapsuleId, setOpeningCapsuleId] = useState<string | null>(null);
+  const [openedCapsuleIds, setOpenedCapsuleIds] = useState<string[]>(() => readOpenedCapsuleIds());
   const [isIndexLoading, setIsIndexLoading] = useState(false);
   const [indexError, setIndexError] = useState<string | null>(null);
   const [capsuleScope, setCapsuleScope] = useState("");
@@ -218,7 +233,10 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
   const sentCount = transactionCapsules.length;
   const sealedCount = visibleCapsules.length;
   const totalBytes = visibleCapsules.reduce((sum, capsule) => sum + capsule.sizeBytes, 0);
-  const openedCount = visibleCapsules.filter((capsule) => capsule.status === "opened").length;
+  const openedCapsuleSet = useMemo(() => new Set(openedCapsuleIds), [openedCapsuleIds]);
+  const openedCount = visibleCapsules.filter(
+    (capsule) => capsule.status === "opened" || openedCapsuleSet.has(capsule.id),
+  ).length;
   const lockedCount = visibleCapsules.filter((capsule) => Date.now() < capsule.unlockAt).length;
   const receivedInbox = [...receivedCapsules].sort((a, b) => b.createdAt - a.createdAt).slice(0, 4);
   const networkConfig = SHELBY_NETWORKS[selectedNetwork];
@@ -242,6 +260,15 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
     sealStep === "uploading" ||
     sealStep === "registry" ||
     sealStep === "escrow";
+
+  function markCapsuleOpened(capsuleId: string): void {
+    setOpenedCapsuleIds((current) => {
+      if (current.includes(capsuleId)) return current;
+      const next = [capsuleId, ...current].slice(0, 500);
+      writeOpenedCapsuleIds(next);
+      return next;
+    });
+  }
 
   useEffect(() => {
     localStorage.removeItem("yora:capsules:v1");
@@ -513,6 +540,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
         });
       }
       setSelectedCapsule(null);
+      markCapsuleOpened(capsule.id);
       setCapsules((current) =>
         current.map((item) => (item.id === capsule.id ? { ...item, status: "opened" } : item)),
       );
