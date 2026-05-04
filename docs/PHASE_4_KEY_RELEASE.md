@@ -185,16 +185,48 @@ Yora's Shelbynet storage flow has been tested successfully. Shelby Testnet routi
 Implemented in this repository:
 
 - remote key-release frontend adapter,
+- Vercel API routes for key escrow and release,
 - deterministic creator escrow message,
 - deterministic recipient release message,
 - RSA-OAEP encryption of escrowed capsule keys before they are sent to the remote release API,
+- server-side decrypt of escrowed keys only after release validation,
+- Upstash/Vercel KV-style REST storage for encrypted key records,
+- Ed25519 wallet signature verification for the key-release API,
 - optional `VITE_YORA_KEY_RELEASE_URL` switch,
 - optional `VITE_YORA_KEY_RELEASE_PUBLIC_KEY` switch.
 
 Still required outside this frontend repo:
 
-- deploy the key-release API,
-- store encrypted keys in durable infrastructure,
-- verify Aptos wallet signatures server-side,
+- configure durable KV credentials in Vercel,
 - connect the service to the Aptos registry once published,
 - rotate the RSA private key with an operational key-management process.
+
+## Deploying the Key-Release API
+
+Generate a keypair:
+
+```bash
+npm run key-release:keys
+```
+
+Set the public key in frontend env:
+
+```bash
+VITE_YORA_KEY_RELEASE_PUBLIC_KEY=<generated-public-key>
+VITE_YORA_KEY_RELEASE_URL=https://yora-nine.vercel.app/api
+```
+
+Set these as server-only Vercel env variables:
+
+```bash
+YORA_KEY_RELEASE_PRIVATE_KEY=<generated-private-key>
+YORA_KV_REST_API_URL=<upstash-or-vercel-kv-rest-url>
+YORA_KV_REST_API_TOKEN=<upstash-or-vercel-kv-rest-token>
+```
+
+The API endpoints are:
+
+```text
+POST /api/v1/capsules/escrow
+POST /api/v1/capsules/release
+```

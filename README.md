@@ -148,11 +148,16 @@ VITE_SHELBY_TESTNET_API_KEY=
 VITE_YORA_KEY_RELEASE_URL=
 VITE_YORA_KEY_RELEASE_PUBLIC_KEY=
 VITE_YORA_REGISTRY_ADDRESS=
+YORA_KEY_RELEASE_PRIVATE_KEY=
+YORA_KV_REST_API_URL=
+YORA_KV_REST_API_TOKEN=
 ```
 
 Do not commit `.env` or real API keys. The repository ignores local environment files.
 
 > Important: Vite exposes `VITE_` variables to the browser bundle. If Shelby API keys must be treated as private secrets, move Shelby writes behind a backend/proxy before mainnet-grade production use.
+
+The `YORA_` variables without `VITE_` are server-only values used by the key-release API. Keep them private in Vercel project settings.
 
 ## Local Development
 
@@ -170,6 +175,34 @@ npm run build
 ```
 
 The compiled app is generated in `dist/`.
+
+## Key-Release API
+
+Yora includes Vercel API routes for production key release:
+
+```text
+POST /api/v1/capsules/escrow
+POST /api/v1/capsules/release
+```
+
+Generate RSA-OAEP keys for the service:
+
+```bash
+npm run key-release:keys
+```
+
+Set `VITE_YORA_KEY_RELEASE_PUBLIC_KEY` in the frontend environment and keep `YORA_KEY_RELEASE_PRIVATE_KEY` server-only. The API stores encrypted key records through `YORA_KV_REST_API_URL` and `YORA_KV_REST_API_TOKEN`.
+
+## Aptos Registry
+
+The optional Move registry package is in `move/`.
+
+```bash
+npm run move:compile -- --named-addresses yora=<publisher-address>
+npm run move:publish -- --named-addresses yora=<publisher-address>
+```
+
+After publishing, initialize the registry and set `VITE_YORA_REGISTRY_ADDRESS=<publisher-address>`.
 
 ## Deployment
 

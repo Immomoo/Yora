@@ -19,13 +19,13 @@ The encrypted payload remains on Shelby. The Move registry stores metadata only.
 ## Compile
 
 ```bash
-aptos move compile --package-dir move --named-addresses yora=<publisher-address>
+npm run move:compile -- --named-addresses yora=<publisher-address>
 ```
 
 ## Publish
 
 ```bash
-aptos move publish --package-dir move --named-addresses yora=<publisher-address>
+npm run move:publish -- --named-addresses yora=<publisher-address>
 ```
 
 After publishing, initialize the registry once:

@@ -423,6 +423,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       capsule: manifest,
       creatorMessage,
       creatorSignature,
+      creatorPublicKey: wallet.account?.publicKey?.toString(),
     });
     setCapsuleScope(currentScope);
     setCapsules((current) => [manifest, ...current.filter((capsule) => capsule.id !== manifest.id)]);
@@ -460,6 +461,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
         capsule,
         recipientMessage,
         recipientSignature,
+        recipientPublicKey: wallet.account?.publicKey?.toString(),
         timestamp: releaseTimestamp,
       });
       const ciphertext = await readBlob(capsule);

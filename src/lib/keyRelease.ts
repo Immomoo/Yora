@@ -32,7 +32,18 @@ function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 
 function signaturePayload(signature: unknown): unknown {
   if (!signature || typeof signature !== "object") return signature;
-  return JSON.parse(JSON.stringify(signature));
+  const value = signature as Record<string, unknown>;
+  const signed = value.signature as { toString?: () => string } | string | undefined;
+  return {
+    address: value.address,
+    application: value.application,
+    chainId: value.chainId,
+    fullMessage: value.fullMessage,
+    message: value.message,
+    nonce: value.nonce,
+    prefix: value.prefix,
+    signature: typeof signed === "string" ? signed : signed?.toString?.(),
+  };
 }
 
 async function encryptKeyForRemote(keyBytes: Uint8Array): Promise<{ encryptedKey: string; keyEncoding: string }> {
@@ -96,6 +107,7 @@ export async function escrowKey(params: {
   capsule?: CapsuleManifest;
   creatorSignature?: unknown;
   creatorMessage?: string;
+  creatorPublicKey?: string;
 }): Promise<void> {
   if (isRemoteKeyReleaseEnabled()) {
     if (!params.capsule || !params.creatorSignature || !params.creatorMessage) {
@@ -121,6 +133,7 @@ export async function escrowKey(params: {
         encryptedKey: encrypted.encryptedKey,
         keyEncoding: encrypted.keyEncoding,
         creatorMessage: params.creatorMessage,
+        creatorPublicKey: params.creatorPublicKey,
         creatorSignature: signaturePayload(params.creatorSignature),
       }),
     });
@@ -148,6 +161,7 @@ export async function releaseKey(params: {
   capsule?: CapsuleManifest;
   recipientSignature?: unknown;
   recipientMessage?: string;
+  recipientPublicKey?: string;
   timestamp?: number;
   now?: number;
 }): Promise<Uint8Array> {
@@ -169,6 +183,7 @@ export async function releaseKey(params: {
         ciphertextDigest: params.capsule.ciphertextDigest,
         timestamp: params.timestamp,
         recipientMessage: params.recipientMessage,
+        recipientPublicKey: params.recipientPublicKey,
         recipientSignature: signaturePayload(params.recipientSignature),
       }),
     });

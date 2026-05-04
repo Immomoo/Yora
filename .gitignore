@@ -11,3 +11,4 @@ vite.err.log
 !.env.example
 
 .vercel
+move/build/
