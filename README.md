@@ -32,7 +32,7 @@ The dApp currently supports:
 
 - Message capsules
 - File capsules
-- Local AES-GCM payload encryption
+- Browser-side payload encryption before storage
 - Shelby blob writes
 - Shelbynet Devnet and Shelby Testnet route switching
 - Aptos wallet connection
@@ -46,7 +46,7 @@ The dApp currently supports:
 
 | Area | Status | Notes |
 | --- | --- | --- |
-| Local encryption | Implemented | Payloads are encrypted before storage. |
+| Browser-side encryption | Implemented | Payloads are encrypted before storage. Current implementation uses Web Crypto AES-GCM. |
 | Shelby blob storage | Implemented | New capsules are written as encrypted Shelby blobs. |
 | Shelbynet route | Implemented | Uses the Shelbynet Shelby blob endpoint and API key. |
 | Shelby Testnet route | Implemented | Uses the Shelby Testnet blob endpoint and API key. |
@@ -62,7 +62,7 @@ The dApp currently supports:
 ```mermaid
 flowchart LR
   Sender[Sender wallet] --> Compose[Create capsule]
-  Compose --> Encrypt[Encrypt payload locally]
+  Compose --> Encrypt[Encrypt payload in browser]
   Encrypt --> Envelope[Build Yora capsule envelope]
   Envelope --> Shelby[Write encrypted blob to Shelby]
   Shelby --> Index[Discover via Shelby index]
@@ -71,7 +71,7 @@ flowchart LR
   Check -- No --> Locked[Keep capsule locked]
   Check -- Yes --> Approval[Recipient wallet approval]
   Approval --> Release[Release decrypt key]
-  Release --> Decrypt[Decrypt locally]
+  Release --> Decrypt[Decrypt in browser]
   Decrypt --> Open[Open message or file]
 ```
 
@@ -112,7 +112,7 @@ flowchart TB
    The sender enters a capsule name, recipient wallet address, unlock time, and either a message or file.
 
 2. **Encrypt**
-   Yora encrypts the payload locally with AES-GCM before storage.
+   Yora encrypts the payload in the browser with Web Crypto before storage.
 
 3. **Store**
    Yora writes a capsule envelope containing encrypted payload metadata and ciphertext to the selected Shelby network.
@@ -121,7 +121,7 @@ flowchart TB
    The recipient wallet can discover capsules addressed to it through the Shelby index.
 
 5. **Unseal**
-   After the unlock time, the recipient wallet approves the unseal flow and Yora decrypts the Shelby blob locally.
+   After the unlock time, the recipient wallet approves the unseal flow and Yora decrypts the Shelby blob in the browser.
 
 ## Network Support
 
@@ -182,12 +182,14 @@ For Vercel deployments, configure the same environment variables from `.env.exam
 
 Yora currently provides:
 
-- Local payload encryption before storage
+- Browser-side payload encryption before storage
 - Encrypted-only Shelby blob writes
 - Recipient address filtering for capsule discovery
 - Unlock-time checks before unseal
 - Wallet approval before decrypt flow
 - No local capsule fallback when Shelby writes fail
+
+Implementation detail: the current browser encryption helper uses AES-GCM 256 through the Web Crypto API.
 
 Yora does **not** yet provide:
 

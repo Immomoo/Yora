@@ -1,0 +1,18 @@
+{
+  "name": "Yora",
+  "short_name": "Yora",
+  "description": "Time-locked encrypted capsules for Aptos and Shelby.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ece7dc",
+  "theme_color": "#2c2119",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "64x64",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
