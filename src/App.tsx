@@ -35,18 +35,26 @@ import {
 import type { CapsuleDraft, CapsuleManifest, ShelbyNetworkId } from "./types";
 import { formatAddress, formatBytes } from "./lib/bytes";
 import { encryptDraft, decryptPayload } from "./lib/crypto";
-import { escrowKey, releaseKey } from "./lib/keyRelease";
+import {
+  buildKeyEscrowMessage,
+  buildKeyReleaseMessage,
+  escrowKey,
+  isRemoteKeyReleaseEnabled,
+  keyReleaseModeLabel,
+  releaseKey,
+} from "./lib/keyRelease";
 import { readBlob } from "./lib/storage";
 import { createShelbyClient, shelbyBlobUrl, SHELBY_NETWORKS } from "./lib/shelby";
 import { capsuleBlobName, discoverShelbyCapsules, encodeCapsuleEnvelope } from "./lib/shelbyCapsules";
 import { comparableAddress, sameAddress } from "./lib/address";
+import { buildRegisterCapsuleTransaction, isAptosRegistryEnabled, registryModeLabel } from "./lib/aptosRegistry";
 
 const DEFAULT_UNLOCK = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
 const SHELBY_EXPLORER_BASE_URL = "https://explorer.shelby.xyz";
 const RUNTIME_VERSION = "shelby-index-v3";
 
 type Page = "landing" | "dashboard" | "create" | "capsules" | "transactions" | "profile";
-type SealStep = "idle" | "encrypting" | "approving" | "uploading" | "escrow" | "sealed" | "error";
+type SealStep = "idle" | "encrypting" | "approving" | "uploading" | "registry" | "escrow" | "sealed" | "error";
 
 interface AppProps {
   selectedNetwork: ShelbyNetworkId;
@@ -211,7 +219,13 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
     client: shelbyClient,
     onError: (error) => setActivity(`Shelby rejected the blob write: ${error.message}`),
   });
-  const isBusy = uploadBlobs.isPending || sealStep === "encrypting" || sealStep === "approving" || sealStep === "uploading" || sealStep === "escrow";
+  const isBusy =
+    uploadBlobs.isPending ||
+    sealStep === "encrypting" ||
+    sealStep === "approving" ||
+    sealStep === "uploading" ||
+    sealStep === "registry" ||
+    sealStep === "escrow";
 
   useEffect(() => {
     localStorage.removeItem("yora:capsules:v1");
@@ -318,6 +332,12 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       setSealStep("error");
       return;
     }
+    if (isRemoteKeyReleaseEnabled() && !wallet.signMessage) {
+      setActivity("This wallet cannot sign the remote key escrow request.");
+      setLastError("Choose a wallet that supports message signing before using the remote key-release service.");
+      setSealStep("error");
+      return;
+    }
 
     setSealStep("encrypting");
     setActivity("Encrypting the payload locally...");
@@ -365,12 +385,44 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       return;
     }
 
+    if (isAptosRegistryEnabled()) {
+      try {
+        setSealStep("registry");
+        setActivity("Approve the Aptos registry transaction...");
+        await wallet.signAndSubmitTransaction(buildRegisterCapsuleTransaction(manifest) as never);
+        setActivity("Aptos registry recorded the capsule metadata.");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Aptos registry did not accept the capsule metadata.";
+        setSealStep("error");
+        setLastError(message);
+        setActivity(`Aptos registry failed: ${message}`);
+        return;
+      }
+    }
+
     setSealStep("escrow");
+    let creatorMessage: string | undefined;
+    let creatorSignature: unknown;
+    if (isRemoteKeyReleaseEnabled()) {
+      setActivity("Approve key escrow for the remote release service...");
+      creatorMessage = buildKeyEscrowMessage(manifest);
+      creatorSignature = await wallet.signMessage({
+        message: creatorMessage,
+        nonce: crypto.randomUUID(),
+        address: true,
+        application: true,
+        chainId: true,
+      });
+    }
+
     await escrowKey({
       keyId,
       recipient: draft.recipient,
       unlockAt: draft.unlockAt,
       keyBytes: encrypted.keyBytes,
+      capsule: manifest,
+      creatorMessage,
+      creatorSignature,
     });
     setCapsuleScope(currentScope);
     setCapsules((current) => [manifest, ...current.filter((capsule) => capsule.id !== manifest.id)]);
@@ -390,8 +442,12 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       setLastError(null);
       setOpeningCapsuleId(capsule.id);
       setActivity("Requesting recipient wallet approval...");
-      await wallet.signMessage({
-        message: `Unseal Yora capsule: ${capsule.title}\nCapsule ID: ${capsule.id}\nDigest: ${capsule.ciphertextDigest}`,
+      const releaseTimestamp = Date.now();
+      const recipientMessage = isRemoteKeyReleaseEnabled()
+        ? buildKeyReleaseMessage(capsule, releaseTimestamp)
+        : `Unseal Yora capsule: ${capsule.title}\nCapsule ID: ${capsule.id}\nDigest: ${capsule.ciphertextDigest}`;
+      const recipientSignature = await wallet.signMessage({
+        message: recipientMessage,
         nonce: crypto.randomUUID(),
         address: true,
         application: true,
@@ -401,6 +457,10 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       const key = await releaseKey({
         keyId: capsule.keyId,
         recipient: connectedAddress,
+        capsule,
+        recipientMessage,
+        recipientSignature,
+        timestamp: releaseTimestamp,
       });
       const ciphertext = await readBlob(capsule);
       const plaintext = await decryptPayload(ciphertext, key, new Uint8Array(capsule.iv.split(",").map(Number)));
@@ -436,12 +496,15 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
     { label: "Aptos", value: networkConfig.shortLabel, tone: wallet.connected ? "good" : "idle" },
     { label: "Shelby", value: uploadBlobs.isPending ? "Uploading" : networkConfig.shortLabel, tone: uploadBlobs.isPending ? "busy" : "good" },
     { label: "Blobs", value: "Shelby only", tone: "good" },
+    { label: "Keys", value: isRemoteKeyReleaseEnabled() ? "Remote" : "Dev vault", tone: isRemoteKeyReleaseEnabled() ? "good" : "idle" },
+    { label: "Registry", value: isAptosRegistryEnabled() ? "Aptos" : "Optional", tone: isAptosRegistryEnabled() ? "good" : "idle" },
   ];
 
   const sealSteps: Array<[SealStep, string]> = [
     ["encrypting", "Encrypt"],
     ["approving", "Wallet approval"],
     ["uploading", "Shelby commit"],
+    ["registry", "Aptos registry"],
     ["escrow", "Release key"],
     ["sealed", "Capsule sealed"],
   ];
@@ -1241,6 +1304,14 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 <div>
                   <dt>Storage mode</dt>
                   <dd>Shelby encrypted blobs</dd>
+                </div>
+                <div>
+                  <dt>Key release</dt>
+                  <dd>{keyReleaseModeLabel()}</dd>
+                </div>
+                <div>
+                  <dt>Registry</dt>
+                  <dd>{registryModeLabel()}</dd>
                 </div>
                 <div>
                   <dt>Total payload</dt>

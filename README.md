@@ -54,8 +54,8 @@ The dApp currently supports:
 | Recipient discovery | Implemented | Yora indexes Shelby capsule envelopes addressed to the connected wallet. |
 | Sent / received separation | Implemented | Capsule cards identify inbound and outbound capsules. |
 | Explorer links | Implemented | Outgoing writes link to the Shelby explorer. |
-| Production key release | Planned | See [Phase 4 key release](docs/PHASE_4_KEY_RELEASE.md). |
-| Aptos Move registry | Planned | Recommended for stronger production guarantees. |
+| Remote key release | Integrated | Frontend supports a remote key-release API through env configuration. See [Phase 4 key release](docs/PHASE_4_KEY_RELEASE.md). |
+| Aptos Move registry | Implemented as package | Optional registry module exists in [`move/`](move/README.md). Publish it and set `VITE_YORA_REGISTRY_ADDRESS` to activate registry writes. |
 
 ## How It Works
 
@@ -145,6 +145,9 @@ VITE_SHELBYNET_APTOS_API_KEY=
 VITE_SHELBY_API_KEY=
 VITE_SHELBYNET_API_KEY=
 VITE_SHELBY_TESTNET_API_KEY=
+VITE_YORA_KEY_RELEASE_URL=
+VITE_YORA_KEY_RELEASE_PUBLIC_KEY=
+VITE_YORA_REGISTRY_ADDRESS=
 ```
 
 Do not commit `.env` or real API keys. The repository ignores local environment files.
@@ -188,13 +191,15 @@ Yora currently provides:
 - Unlock-time checks before unseal
 - Wallet approval before decrypt flow
 - No local capsule fallback when Shelby writes fail
+- Optional remote key-release API integration
+- Optional Aptos Move registry write after Shelby accepts a blob
 
 Implementation detail: the current browser encryption helper uses AES-GCM 256 through the Web Crypto API.
 
 Yora does **not** yet provide:
 
-- Fully decentralized key release
-- Aptos Move contract registry for capsule state
+- Deployed decentralized key release
+- Published Aptos Move registry address by default
 - Threshold encryption or decentralized key management
 - Mainnet-grade key custody
 
@@ -211,11 +216,14 @@ src/
     shelby.ts             Shelby route configuration
     shelbyCapsules.ts     Capsule envelope encoding and Shelby discovery
     keyRelease.ts         Current development key-release adapter
+    aptosRegistry.ts      Optional Aptos Move registry transaction builder
     storage.ts            Shelby blob reading
     address.ts            Address normalization helpers
 docs/
   PHASE_4_KEY_RELEASE.md  Production key-release plan
   assets/                 README screenshots
+move/
+  sources/                Optional Aptos Move registry module
 ```
 
 ## Tech Stack
@@ -231,7 +239,7 @@ docs/
 ## Roadmap
 
 - Replace the development key-release adapter with a production key-release service.
-- Add an Aptos Move registry for capsule metadata, digest, recipient, unlock time, and blob pointer.
+- Deploy the Aptos Move registry and configure `VITE_YORA_REGISTRY_ADDRESS`.
 - Add automated tests for wallet switching, recipient discovery, and network route behavior.
 - Add server-side or contract-backed verification for production unseal guarantees.
 - Improve bundle splitting around Aptos wallet dependencies.

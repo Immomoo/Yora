@@ -180,4 +180,21 @@ release_events
 
 ## Current Status
 
-Yora's Shelbynet storage flow has been tested successfully. Shelby Testnet routing is implemented in the dApp, but full testnet validation depends on Early Access availability. Phase 4 should be the next production-hardening milestone after Early Access is granted.
+Yora's Shelbynet storage flow has been tested successfully. Shelby Testnet routing is implemented in the dApp, but full testnet validation depends on Early Access availability.
+
+Implemented in this repository:
+
+- remote key-release frontend adapter,
+- deterministic creator escrow message,
+- deterministic recipient release message,
+- RSA-OAEP encryption of escrowed capsule keys before they are sent to the remote release API,
+- optional `VITE_YORA_KEY_RELEASE_URL` switch,
+- optional `VITE_YORA_KEY_RELEASE_PUBLIC_KEY` switch.
+
+Still required outside this frontend repo:
+
+- deploy the key-release API,
+- store encrypted keys in durable infrastructure,
+- verify Aptos wallet signatures server-side,
+- connect the service to the Aptos registry once published,
+- rotate the RSA private key with an operational key-management process.

@@ -1,0 +1,10 @@
+[package]
+name = "YoraRegistry"
+version = "0.1.0"
+upgrade_policy = "compatible"
+
+[addresses]
+yora = "_"
+
+[dependencies]
+AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework", rev = "mainnet" }
