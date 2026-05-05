@@ -441,9 +441,9 @@ p { color: var(--muted); }
   display: grid;
   align-content: start;
   gap: 10px;
-  padding: var(--space-xl) var(--space-xl) clamp(72px, 7vh, 104px);
+  padding: var(--space-xl) var(--space-xl) 36px;
   overflow-y: auto;
-  scroll-padding-bottom: clamp(72px, 7vh, 104px);
+  scroll-padding-bottom: 36px;
 }
 
 .main-stage > section {
@@ -2293,6 +2293,7 @@ dd {
   grid-template-columns: 200px minmax(0, 1fr) auto;
   gap: var(--space-lg);
   align-items: center;
+  min-height: 64px;
   padding: 12px var(--space-lg);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -2320,9 +2321,10 @@ dd {
   font-family: "Manrope", "Segoe UI", sans-serif;
   font-size: 0.92rem;
   font-weight: 750;
+  line-height: 1.18;
 }
 
-.assurance p { color: oklch(78% 0.026 80); font-size: 0.88rem; line-height: 1.62; }
+.assurance p { color: oklch(78% 0.026 80); font-size: 0.88rem; line-height: 1.52; }
 
 .runtime-chip {
   justify-self: end;
@@ -2332,6 +2334,7 @@ dd {
   font-family: "Geist Mono", monospace;
   font-size: 0.58rem;
   font-weight: 700;
+  line-height: 1.25;
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
