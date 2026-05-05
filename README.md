@@ -186,6 +186,8 @@ Current limitations:
 
 See [Phase 4 key release](docs/PHASE_4_KEY_RELEASE.md) for the production hardening plan.
 
+For a dedicated trust model, metadata exposure notes, key-release assumptions, and disclosure guidance, see [SECURITY.md](SECURITY.md).
+
 ## Network Support
 
 Yora supports two selectable Shelby routes.
