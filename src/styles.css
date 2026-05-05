@@ -441,8 +441,9 @@ p { color: var(--muted); }
   display: grid;
   align-content: start;
   gap: 10px;
-  padding: var(--space-xl);
+  padding: var(--space-xl) var(--space-xl) clamp(72px, 7vh, 104px);
   overflow-y: auto;
+  scroll-padding-bottom: clamp(72px, 7vh, 104px);
 }
 
 .main-stage > section {
@@ -2888,7 +2889,10 @@ dd {
     display: none;
   }
 
-  .main-stage { padding: var(--space-md); }
+  .main-stage {
+    padding: var(--space-md) var(--space-md) 92px;
+    scroll-padding-bottom: 92px;
+  }
 
   /* Mobile bottom nav */
   .app-shell::after {
