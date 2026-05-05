@@ -20,6 +20,10 @@ function textBytes(value: string): number[] {
   return Array.from(new TextEncoder().encode(value));
 }
 
+function textHex(value: string): string {
+  return `0x${Array.from(new TextEncoder().encode(value), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
 function valueAt(source: unknown, key: string): unknown {
   return source && typeof source === "object" ? (source as Record<string, unknown>)[key] : undefined;
 }
@@ -96,7 +100,7 @@ export async function verifyCapsuleRegistry(
       payload: {
         function: `${registryAddress}::yora_registry::get_capsule`,
         typeArguments: [],
-        functionArguments: [registryAddress, textBytes(capsule.id)],
+        functionArguments: [registryAddress, textHex(capsule.id)],
       },
     });
 
