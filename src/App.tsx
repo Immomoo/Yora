@@ -1588,21 +1588,23 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                         <strong>{storageReceiptId(capsule)}</strong>
                         <small>{formatCapsuleStorage(capsule)} / {shortRegistryStatus(capsule)}</small>
                       </div>
-                      <a className="receipt-action" href={shelbyExplorerBlobUrl(capsule)} target="_blank" rel="noreferrer">
-                        <ExternalLink size={13} />
-                        Shelby
-                      </a>
-                      {capsule.registryTxHash && (
-                        <a
-                          className="receipt-action"
-                          href={aptosExplorerTxUrl(capsule.registryTxHash, capsule.shelbyNetwork ?? selectedNetwork)}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
+                      <div className="receipt-link-stack">
+                        <a className="receipt-action" href={shelbyExplorerBlobUrl(capsule)} target="_blank" rel="noreferrer">
                           <ExternalLink size={13} />
-                          Registry
+                          Shelby
                         </a>
-                      )}
+                        {capsule.registryTxHash && (
+                          <a
+                            className="receipt-action"
+                            href={aptosExplorerTxUrl(capsule.registryTxHash, capsule.shelbyNetwork ?? selectedNetwork)}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <ExternalLink size={13} />
+                            Registry
+                          </a>
+                        )}
+                      </div>
                     </div>
                     <div className="capsule-actions">
                       <button className="ghost-button" onClick={() => setSelectedCapsule(capsule)}>

@@ -1734,7 +1734,7 @@ textarea:focus {
 /* ─── Capsule cards ──────────────────────────────────────── */
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: var(--space-md);
   margin-top: 0;
 }
@@ -1876,10 +1876,10 @@ textarea:focus {
 
 .capsule-card {
   position: relative;
-  min-height: 210px;
+  min-height: 404px;
   display: grid;
   align-content: start;
-  gap: var(--space-md);
+  gap: 13px;
   padding: var(--space-lg);
   animation: appReveal 360ms var(--ease-out) both;
   transition:
@@ -1937,6 +1937,7 @@ textarea:focus {
 .capsule-card h3 {
   font-size: 1.38rem;
   line-height: 1.05;
+  min-height: 1.5em;
 }
 
 .capsule-note {
@@ -1946,12 +1947,17 @@ textarea:focus {
   line-height: 1.45;
 }
 
+.capsule-card dl {
+  min-height: 122px;
+}
+
 .storage-receipt {
+  align-self: end;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(86px, auto);
   align-items: center;
-  gap: var(--space-md);
-  padding: 11px 12px;
+  gap: var(--space-sm);
+  padding: 10px;
   border: 1px solid color-mix(in oklch, var(--green), var(--line) 50%);
   border-radius: calc(var(--radius) - 4px);
   background:
@@ -1988,19 +1994,26 @@ textarea:focus {
   white-space: nowrap;
 }
 
+.receipt-link-stack {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
 .receipt-action {
-  min-height: 30px;
+  min-height: 28px;
+  min-width: 82px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  padding: 0 10px;
+  padding: 0 9px;
   border: 1px solid color-mix(in oklch, var(--green), var(--line) 36%);
   border-radius: 999px;
   background: color-mix(in oklch, var(--surface), var(--green-soft) 36%);
   color: var(--green);
   font-family: "Geist Mono", monospace;
-  font-size: 0.64rem;
+  font-size: 0.61rem;
   font-weight: 800;
   text-decoration: none;
   text-transform: uppercase;
@@ -2017,8 +2030,8 @@ textarea:focus {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
+  justify-content: flex-start;
+  gap: var(--space-sm);
   color: var(--muted);
   font-size: 0.68rem;
   font-weight: 700;
@@ -2029,7 +2042,7 @@ textarea:focus {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 26px;
+  min-height: 25px;
   padding: 0 9px;
   border: 1px solid currentColor;
   border-radius: 999px;
@@ -2055,11 +2068,15 @@ textarea:focus {
 .capsule-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-sm);
+  gap: 10px;
 }
 
 .capsule-actions .ghost-button,
-.capsule-actions .secondary { width: 100%; min-height: 38px; }
+.capsule-actions .secondary {
+  width: 100%;
+  min-height: 40px;
+  padding-inline: var(--space-md);
+}
 
 .status {
   display: inline-flex;
