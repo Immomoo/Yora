@@ -150,7 +150,30 @@ function shortRegistryStatus(capsule: CapsuleManifest): string {
   if (status === "mismatch") return "Mismatch";
   if (status === "missing") return "Missing";
   if (status === "unavailable") return "Unavailable";
-  return capsule.registryTxHash ? "Recorded" : "Not recorded";
+  if (capsule.registryTxHash) return "Tx recorded";
+  return isAptosRegistryEnabled(capsule.shelbyNetwork ?? "testnet") ? "Checking" : "Not enabled";
+}
+
+function registryDisplayClass(capsule: CapsuleManifest): "ready" | "locked" | "warning" | "shelby" {
+  if (!capsule.registryVerification && isAptosRegistryEnabled(capsule.shelbyNetwork ?? "testnet")) return "locked";
+  return registryStatusClass(capsule.registryVerification);
+}
+
+function registryDisplayTitle(capsule: CapsuleManifest): string {
+  if (capsule.registryVerification) return capsule.registryVerification.message;
+  if (isAptosRegistryEnabled(capsule.shelbyNetwork ?? "testnet")) {
+    return "Yora is checking this capsule against the Aptos registry.";
+  }
+  return "Aptos registry is not configured for this route.";
+}
+
+function registryTxLabel(capsule: CapsuleManifest): string {
+  if (capsule.registryTxHash) return shortDigest(capsule.registryTxHash);
+  if (!isAptosRegistryEnabled(capsule.shelbyNetwork ?? "testnet")) return "Not enabled";
+  if (capsule.registryVerification?.status === "verified" || capsule.registryVerification?.status === "released") {
+    return "No local tx receipt";
+  }
+  return shortRegistryStatus(capsule);
 }
 
 function isPreviewableImage(mimeType?: string, fileName?: string): boolean {
@@ -1528,8 +1551,8 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                         {isRecipient ? "Received" : isCreator ? "Sent" : formatCapsuleStorage(capsule)}
                       </span>
                       <span
-                        className={`status ${registryStatusClass(capsule.registryVerification)}`}
-                        title={capsule.registryVerification?.message ?? "Aptos registry has not been checked yet."}
+                        className={`status ${registryDisplayClass(capsule)}`}
+                        title={registryDisplayTitle(capsule)}
                       >
                         <ShieldCheck size={13} />
                         {shortRegistryStatus(capsule)}
@@ -1563,7 +1586,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                       <div>
                         <span>Stored on Shelby</span>
                         <strong>{storageReceiptId(capsule)}</strong>
-                        <small>{formatCapsuleStorage(capsule)} / {registryStatusLabel(capsule.registryVerification)}</small>
+                        <small>{formatCapsuleStorage(capsule)} / {shortRegistryStatus(capsule)}</small>
                       </div>
                       <a className="receipt-action" href={shelbyExplorerBlobUrl(capsule)} target="_blank" rel="noreferrer">
                         <ExternalLink size={13} />
@@ -1657,7 +1680,10 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                           {shortRegistryStatus(capsule)}
                         </a>
                       ) : (
-                        <span>{shortRegistryStatus(capsule)}</span>
+                        <span className={`status ${registryDisplayClass(capsule)}`} title={registryDisplayTitle(capsule)}>
+                          <ShieldCheck size={13} />
+                          {shortRegistryStatus(capsule)}
+                        </span>
                       )}
                       <time>{new Date(capsule.createdAt).toLocaleString()}</time>
                     </article>
@@ -1814,8 +1840,8 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 {formatCapsuleStorage(selectedCapsule)}
               </span>
               <span
-                className={`status ${registryStatusClass(withLocalReceipt(selectedCapsule).registryVerification)}`}
-                title={withLocalReceipt(selectedCapsule).registryVerification?.message ?? "Aptos registry has not been checked yet."}
+                className={`status ${registryDisplayClass(withLocalReceipt(selectedCapsule))}`}
+                title={registryDisplayTitle(withLocalReceipt(selectedCapsule))}
               >
                 <ShieldCheck size={13} />
                 {shortRegistryStatus(withLocalReceipt(selectedCapsule))}
@@ -1874,7 +1900,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                   </div>
                   <div>
                     <dt>Registry tx</dt>
-                    <dd>{withLocalReceipt(selectedCapsule).registryTxHash ? shortDigest(withLocalReceipt(selectedCapsule).registryTxHash ?? "") : "Optional"}</dd>
+                    <dd>{registryTxLabel(withLocalReceipt(selectedCapsule))}</dd>
                   </div>
                   <div>
                     <dt>Registry status</dt>
