@@ -2015,6 +2015,7 @@ textarea:focus {
 
 .card-top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
@@ -2085,6 +2086,11 @@ textarea:focus {
 .status.shelby {
   color: var(--rust-dark);
   background: color-mix(in oklch, var(--amber), var(--surface) 82%);
+}
+
+.status.warning {
+  color: var(--rust-dark);
+  background: color-mix(in oklch, var(--rust), var(--surface) 88%);
 }
 
 .drawer-receipt {

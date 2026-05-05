@@ -1,5 +1,15 @@
 export type CapsuleStatus = "draft" | "sealed" | "ready" | "opened";
 export type ShelbyNetworkId = "shelbynet" | "testnet";
+export type RegistryVerificationStatus = "verified" | "released" | "missing" | "mismatch" | "unavailable";
+
+export interface RegistryVerification {
+  status: RegistryVerificationStatus;
+  checkedAt: number;
+  released: boolean;
+  releasedAt?: number;
+  message: string;
+  mismatches?: string[];
+}
 
 export interface CapsuleManifest {
   id: string;
@@ -20,6 +30,7 @@ export interface CapsuleManifest {
   ciphertextDigest: string;
   registryTxHash?: string;
   releaseTxHash?: string;
+  registryVerification?: RegistryVerification;
   status: CapsuleStatus;
   shelbyNetwork?: ShelbyNetworkId;
 }

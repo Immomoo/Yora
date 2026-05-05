@@ -52,6 +52,9 @@ import {
   buildRegisterCapsuleTransaction,
   isAptosRegistryEnabled,
   registryModeLabel,
+  registryStatusClass,
+  registryStatusLabel,
+  verifyCapsuleRegistry,
 } from "./lib/aptosRegistry";
 
 const DEFAULT_UNLOCK = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
@@ -140,9 +143,33 @@ function formatShortDateTime(timestamp: number): string {
   }).format(new Date(timestamp));
 }
 
+function shortRegistryStatus(capsule: CapsuleManifest): string {
+  const status = capsule.registryVerification?.status;
+  if (status === "released") return "Released";
+  if (status === "verified") return "Verified";
+  if (status === "mismatch") return "Mismatch";
+  if (status === "missing") return "Missing";
+  if (status === "unavailable") return "Unavailable";
+  return capsule.registryTxHash ? "Recorded" : "Not recorded";
+}
+
 function isPreviewableImage(mimeType?: string, fileName?: string): boolean {
   if (mimeType?.startsWith("image/")) return true;
   return Boolean(fileName && /\.(apng|avif|gif|jpe?g|png|svg|webp)$/i.test(fileName));
+}
+
+async function attachRegistryVerifications(
+  capsules: CapsuleManifest[],
+  network: ShelbyNetworkId,
+): Promise<CapsuleManifest[]> {
+  if (!isAptosRegistryEnabled(network)) return capsules;
+
+  return Promise.all(
+    capsules.map(async (capsule) => ({
+      ...capsule,
+      registryVerification: await verifyCapsuleRegistry(capsule, network),
+    })),
+  );
 }
 
 function readOpenedCapsuleIds(): string[] {
@@ -403,11 +430,12 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
           const receipt = readCapsuleReceipts().find((item) => item.capsuleId === capsule.id);
           return receipt ? { ...capsule, ...receipt } : capsule;
         });
+        const verifiedCapsules = await attachRegistryVerifications(hydratedCapsules, selectedNetwork);
         if (!cancelled) {
           setCapsuleScope(currentScope);
-          setCapsules(hydratedCapsules);
-          setIndexStatus(`Loaded ${capsuleCountLabel(hydratedCapsules.length)} from Shelby for ${formatAddress(connectedAddress)}.`);
-          setActivity(`Loaded ${capsuleCountLabel(hydratedCapsules.length)} from Shelby for this wallet.`);
+          setCapsules(verifiedCapsules);
+          setIndexStatus(`Loaded ${capsuleCountLabel(verifiedCapsules.length)} from Shelby for ${formatAddress(connectedAddress)}.`);
+          setActivity(`Loaded ${capsuleCountLabel(verifiedCapsules.length)} from Shelby and checked Aptos registry status.`);
         }
       } catch (error) {
         if (!cancelled) {
@@ -572,7 +600,18 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       setActivity(`Key escrow failed: ${message}`);
       return;
     }
-    const finalManifest: CapsuleManifest = registryTxHash ? { ...manifest, registryTxHash } : manifest;
+    const finalManifest: CapsuleManifest = registryTxHash
+      ? {
+          ...manifest,
+          registryTxHash,
+          registryVerification: {
+            status: "verified",
+            checkedAt: Date.now(),
+            released: false,
+            message: "Registry transaction submitted on Aptos.",
+          },
+        }
+      : manifest;
     if (registryTxHash) {
       rememberCapsuleReceipt({ capsuleId: finalManifest.id, registryTxHash });
     }
@@ -659,7 +698,22 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
           if (releaseTxHash) {
             rememberCapsuleReceipt({ capsuleId: capsule.id, releaseTxHash });
             setCapsules((current) =>
-              current.map((item) => (item.id === capsule.id ? { ...item, releaseTxHash, status: "opened" } : item)),
+              current.map((item) =>
+                item.id === capsule.id
+                  ? {
+                      ...item,
+                      releaseTxHash,
+                      status: "opened",
+                      registryVerification: {
+                        status: "released",
+                        checkedAt: Date.now(),
+                        released: true,
+                        releasedAt: Date.now(),
+                        message: "Registry record is marked released on Aptos.",
+                      },
+                    }
+                  : item,
+              ),
             );
           }
           setOpened((current) =>
@@ -1028,10 +1082,13 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                           const receipt = readCapsuleReceipts().find((item) => item.capsuleId === capsule.id);
                           return receipt ? { ...capsule, ...receipt } : capsule;
                         });
+                        return attachRegistryVerifications(hydratedCapsules, selectedNetwork);
+                      })
+                      .then((verifiedCapsules) => {
                         setCapsuleScope(currentScope);
-                        setCapsules(hydratedCapsules);
-                        setIndexStatus(`Loaded ${capsuleCountLabel(hydratedCapsules.length)} from Shelby for ${formatAddress(connectedAddress)}.`);
-                        setActivity(`Loaded ${capsuleCountLabel(hydratedCapsules.length)} from Shelby for this wallet.`);
+                        setCapsules(verifiedCapsules);
+                        setIndexStatus(`Loaded ${capsuleCountLabel(verifiedCapsules.length)} from Shelby for ${formatAddress(connectedAddress)}.`);
+                        setActivity(`Loaded ${capsuleCountLabel(verifiedCapsules.length)} from Shelby and checked Aptos registry status.`);
                       })
                       .catch((error) => {
                         setIndexError(error instanceof Error ? error.message : "Yora could not load capsules from Shelby.");
@@ -1470,6 +1527,13 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                         {isRecipient ? <CornerDownLeft size={13} /> : <CornerUpRight size={13} />}
                         {isRecipient ? "Received" : isCreator ? "Sent" : formatCapsuleStorage(capsule)}
                       </span>
+                      <span
+                        className={`status ${registryStatusClass(capsule.registryVerification)}`}
+                        title={capsule.registryVerification?.message ?? "Aptos registry has not been checked yet."}
+                      >
+                        <ShieldCheck size={13} />
+                        {shortRegistryStatus(capsule)}
+                      </span>
                     </div>
                     <h3>{capsule.title}</h3>
                     <p className="capsule-note">
@@ -1499,7 +1563,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                       <div>
                         <span>Stored on Shelby</span>
                         <strong>{storageReceiptId(capsule)}</strong>
-                        <small>{formatCapsuleStorage(capsule)} / encrypted blob</small>
+                        <small>{formatCapsuleStorage(capsule)} / {registryStatusLabel(capsule.registryVerification)}</small>
                       </div>
                       <a className="receipt-action" href={shelbyExplorerBlobUrl(capsule)} target="_blank" rel="noreferrer">
                         <ExternalLink size={13} />
@@ -1590,10 +1654,10 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                           rel="noreferrer"
                         >
                           <ExternalLink size={13} />
-                          Aptos
+                          {shortRegistryStatus(capsule)}
                         </a>
                       ) : (
-                        <span>Not recorded</span>
+                        <span>{shortRegistryStatus(capsule)}</span>
                       )}
                       <time>{new Date(capsule.createdAt).toLocaleString()}</time>
                     </article>
@@ -1749,6 +1813,13 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 <Server size={13} />
                 {formatCapsuleStorage(selectedCapsule)}
               </span>
+              <span
+                className={`status ${registryStatusClass(withLocalReceipt(selectedCapsule).registryVerification)}`}
+                title={withLocalReceipt(selectedCapsule).registryVerification?.message ?? "Aptos registry has not been checked yet."}
+              >
+                <ShieldCheck size={13} />
+                {shortRegistryStatus(withLocalReceipt(selectedCapsule))}
+              </span>
             </div>
             <div className="storage-receipt drawer-receipt">
               <div>
@@ -1804,6 +1875,10 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                   <div>
                     <dt>Registry tx</dt>
                     <dd>{withLocalReceipt(selectedCapsule).registryTxHash ? shortDigest(withLocalReceipt(selectedCapsule).registryTxHash ?? "") : "Optional"}</dd>
+                  </div>
+                  <div>
+                    <dt>Registry status</dt>
+                    <dd>{registryStatusLabel(withLocalReceipt(selectedCapsule).registryVerification)}</dd>
                   </div>
                   <div>
                     <dt>Release tx</dt>

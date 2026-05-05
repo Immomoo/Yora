@@ -56,6 +56,7 @@ The dApp currently supports:
 | Explorer links | Implemented | Outgoing writes link to the Shelby explorer. |
 | Remote key release | Integrated | Frontend supports a remote key-release API through env configuration. See [Phase 4 key release](docs/PHASE_4_KEY_RELEASE.md). |
 | Aptos Move registry | Integrated | Shelbynet registry writes and release markers are active when `VITE_YORA_SHELBYNET_REGISTRY_ADDRESS` is set. Shelby Testnet can use `VITE_YORA_TESTNET_REGISTRY_ADDRESS` after access is available. |
+| Registry verification | Implemented | Yora reads the Aptos registry view for discovered capsules and shows verified, released, missing, mismatch, or unavailable status. |
 
 ## How It Works
 
