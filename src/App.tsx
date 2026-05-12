@@ -2341,65 +2341,71 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 </div>
               </article>
             </div>
-            <div className="drawer-sections">
-              <section>
-                <h3>Access rules</h3>
-                <dl>
-                  <div>
-                    <dt>Recipient</dt>
-                    <dd>{selectedCapsuleView.recipient}</dd>
-                  </div>
-                  <div>
-                    <dt>Sender</dt>
-                    <dd>{formatAddress(selectedCapsuleView.creator)}</dd>
-                  </div>
-                  <div>
-                    <dt>Unlock time</dt>
-                    <dd>{new Date(selectedCapsuleView.unlockAt).toLocaleString()}</dd>
-                  </div>
-                </dl>
-              </section>
-              <section>
-                <h3>Storage</h3>
-                <dl>
-                  <div>
-                    <dt>Route</dt>
-                    <dd>{formatCapsuleStorage(selectedCapsuleView)}</dd>
-                  </div>
-                  <div>
-                    <dt>Blob name</dt>
-                    <dd>{selectedCapsuleView.blobName}</dd>
-                  </div>
-                  <div>
-                    <dt>Registry tx</dt>
-                    <dd>{registryTxLabel(selectedCapsuleView)}</dd>
-                  </div>
-                  <div>
-                    <dt>Registry status</dt>
-                    <dd>{registryStatusLabel(selectedCapsuleView.registryVerification)}</dd>
-                  </div>
-                  <div>
-                    <dt>Release tx</dt>
-                    <dd>{selectedCapsuleView.releaseTxHash ? shortDigest(selectedCapsuleView.releaseTxHash ?? "") : "Not recorded"}</dd>
-                  </div>
-                </dl>
-              </section>
-              <section>
-                <h3>Payload</h3>
-                <dl>
-                  <div>
-                    <dt>Type</dt>
-                    <dd>{selectedCapsuleView.payloadKind} / {formatBytes(selectedCapsuleView.sizeBytes)}</dd>
-                  </div>
-                  <div>
-                    <dt>Digest</dt>
-                    <dd>{selectedCapsuleView.ciphertextDigest}</dd>
-                  </div>
-                </dl>
-              </section>
-            </div>
+            <details className="drawer-technical">
+              <summary>
+                <span>Technical details</span>
+                <small>Full addresses, blob path, registry state, and ciphertext digest</small>
+              </summary>
+              <div className="drawer-sections">
+                <section>
+                  <h3>Access rules</h3>
+                  <dl>
+                    <div>
+                      <dt>Recipient</dt>
+                      <dd>{selectedCapsuleView.recipient}</dd>
+                    </div>
+                    <div>
+                      <dt>Sender</dt>
+                      <dd>{selectedCapsuleView.creator}</dd>
+                    </div>
+                    <div>
+                      <dt>Unlock time</dt>
+                      <dd>{new Date(selectedCapsuleView.unlockAt).toLocaleString()}</dd>
+                    </div>
+                  </dl>
+                </section>
+                <section>
+                  <h3>Storage</h3>
+                  <dl>
+                    <div>
+                      <dt>Route</dt>
+                      <dd>{formatCapsuleStorage(selectedCapsuleView)}</dd>
+                    </div>
+                    <div>
+                      <dt>Blob name</dt>
+                      <dd>{selectedCapsuleView.blobName}</dd>
+                    </div>
+                    <div>
+                      <dt>Registry tx</dt>
+                      <dd>{registryTxLabel(selectedCapsuleView)}</dd>
+                    </div>
+                    <div>
+                      <dt>Registry status</dt>
+                      <dd>{registryStatusLabel(selectedCapsuleView.registryVerification)}</dd>
+                    </div>
+                    <div>
+                      <dt>Release tx</dt>
+                      <dd>{selectedCapsuleView.releaseTxHash ? shortDigest(selectedCapsuleView.releaseTxHash ?? "") : "Not recorded"}</dd>
+                    </div>
+                  </dl>
+                </section>
+                <section>
+                  <h3>Payload</h3>
+                  <dl>
+                    <div>
+                      <dt>Type</dt>
+                      <dd>{selectedCapsuleView.payloadKind} / {formatBytes(selectedCapsuleView.sizeBytes)}</dd>
+                    </div>
+                    <div>
+                      <dt>Digest</dt>
+                      <dd>{selectedCapsuleView.ciphertextDigest}</dd>
+                    </div>
+                  </dl>
+                </section>
+              </div>
+            </details>
             <button
-              className="primary"
+              className="primary drawer-primary-action"
               onClick={() => void unsealCapsule(selectedCapsuleView)}
               disabled={!selectedCapsuleCanUnseal}
             >
