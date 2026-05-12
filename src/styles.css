@@ -2440,17 +2440,31 @@ textarea:focus {
 }
 
 .storage-receipt {
+  position: relative;
   align-self: end;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(86px, auto);
   align-items: center;
   gap: var(--space-sm);
-  padding: 10px;
+  padding: 11px 12px;
   border: 1px solid color-mix(in oklch, var(--green), var(--line) 50%);
   border-radius: calc(var(--radius) - 4px);
   background:
-    linear-gradient(135deg, color-mix(in oklch, var(--green-soft), transparent 24%), transparent 74%),
+    radial-gradient(circle at 0% 0%, color-mix(in oklch, var(--green-soft), transparent 2%), transparent 34%),
+    linear-gradient(135deg, color-mix(in oklch, var(--green-soft), transparent 18%), transparent 74%),
     color-mix(in oklch, var(--surface), transparent 12%);
+  box-shadow: inset 0 1px 0 color-mix(in oklch, white, transparent 42%);
+}
+
+.storage-receipt::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 999px 999px 0;
+  background: color-mix(in oklch, var(--green), var(--gold) 16%);
 }
 
 .storage-receipt div {
@@ -2611,7 +2625,37 @@ textarea:focus {
 }
 
 .drawer-receipt {
-  margin: var(--space-lg) 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-md);
+  margin: 2px 0;
+  padding: 14px;
+  border-radius: var(--radius);
+}
+
+.drawer-receipt div:first-child {
+  padding-left: 4px;
+}
+
+.drawer-receipt strong {
+  margin-top: 1px;
+  font-size: 0.78rem;
+}
+
+.drawer-receipt-actions {
+  min-width: 132px;
+  justify-items: stretch;
+}
+
+.drawer-receipt-actions .receipt-action {
+  min-height: 34px;
+  min-width: 124px;
+  padding-inline: 12px;
+}
+
+.drawer-receipt-actions .primary-receipt-action {
+  border-color: color-mix(in oklch, var(--green), var(--line) 20%);
+  background: color-mix(in oklch, var(--green-soft), var(--surface) 42%);
+  color: color-mix(in oklch, var(--green), var(--ink) 18%);
 }
 
 /* ─── Data lists ─────────────────────────────────────────── */

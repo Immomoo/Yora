@@ -2302,21 +2302,23 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 <strong>{storageReceiptId(selectedCapsuleView)}</strong>
                 <small>{formatCapsuleStorage(selectedCapsuleView)} / encrypted blob</small>
               </div>
-              <a className="receipt-action" href={shelbyExplorerBlobUrl(selectedCapsuleView)} target="_blank" rel="noreferrer">
-                <ExternalLink size={13} />
-                Open Shelby
-              </a>
-              {selectedCapsuleView.registryTxHash && (
-                <a
-                  className="receipt-action"
-                  href={aptosExplorerTxUrl(selectedCapsuleView.registryTxHash ?? "", selectedCapsuleView.shelbyNetwork ?? selectedNetwork)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
+              <div className="receipt-link-stack drawer-receipt-actions">
+                <a className="receipt-action primary-receipt-action" href={shelbyExplorerBlobUrl(selectedCapsuleView)} target="_blank" rel="noreferrer">
                   <ExternalLink size={13} />
-                  Registry tx
+                  Open Shelby
                 </a>
-              )}
+                {selectedCapsuleView.registryTxHash && (
+                  <a
+                    className="receipt-action"
+                    href={aptosExplorerTxUrl(selectedCapsuleView.registryTxHash ?? "", selectedCapsuleView.shelbyNetwork ?? selectedNetwork)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <ExternalLink size={13} />
+                    Registry tx
+                  </a>
+                )}
+              </div>
             </div>
             <div className="drawer-rule-list">
               <article className={selectedCapsuleIsRecipient ? "ready" : "pending"}>
