@@ -178,6 +178,11 @@ function registryTxLabel(capsule: CapsuleManifest): string {
   return shortRegistryStatus(capsule);
 }
 
+function milestoneState(done: boolean, active = false): "done" | "active" | "pending" {
+  if (done) return "done";
+  return active ? "active" : "pending";
+}
+
 function isPreviewableImage(mimeType?: string, fileName?: string): boolean {
   if (mimeType?.startsWith("image/")) return true;
   return Boolean(fileName && /\.(apng|avif|gif|jpe?g|png|svg|webp)$/i.test(fileName));
@@ -321,6 +326,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
   const [indexStatus, setIndexStatus] = useState("Shelby capsule index ready.");
   const [capsuleFilter, setCapsuleFilter] = useState<CapsuleFilter>("all");
   const [capsuleSearch, setCapsuleSearch] = useState("");
+  const [draftFilePreviewUrl, setDraftFilePreviewUrl] = useState("");
 
   const connectedAddress = normalizedAddress(wallet.account?.address);
   const currentScope = `${selectedNetwork}:${comparableAddress(connectedAddress)}`;
@@ -561,6 +567,50 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
       ).length,
     [receivedCapsules, connectedAddress],
   );
+  const draftPayloadBytes = useMemo(() => {
+    if (mode === "file") return draft.file?.size ?? 0;
+    return new TextEncoder().encode(draft.message.trim()).byteLength;
+  }, [mode, draft.file, draft.message]);
+  const draftPayloadLabel = mode === "file"
+    ? draft.file
+      ? `${draft.file.name} / ${formatBytes(draft.file.size)}`
+      : "No file selected"
+    : `${formatBytes(draftPayloadBytes)} message`;
+  const unlockInFuture = draft.unlockAt > Date.now();
+  const draftReadyChecks = [
+    ["Wallet", Boolean(connectedAddress) && !networkMismatch ? "Ready" : "Connect matching wallet"],
+    ["Recipient", draft.recipient.trim() ? "Address set" : "Add recipient address"],
+    ["Payload", draftPayloadBytes > 0 ? draftPayloadLabel : "Add message or file"],
+    ["Unlock", unlockInFuture ? formatShortDateTime(draft.unlockAt) : "Choose a future time"],
+  ];
+  const recentActivity = useMemo(
+    () =>
+      [...hydratedVisibleCapsules]
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, 4)
+        .map((capsule) => {
+          const isRecipient = sameAddress(capsule.recipient, connectedAddress);
+          const released = capsule.registryVerification?.status === "released" || Boolean(capsule.releaseTxHash) || openedCapsuleSet.has(capsule.id);
+          return {
+            capsule,
+            tone: released ? "ready" : isRecipient ? "received" : "sent",
+            label: released ? "Released" : isRecipient ? "Received" : "Sent",
+            detail: `${formatCapsuleStorage(capsule)} / ${capsule.payloadKind} / ${formatShortDateTime(capsule.createdAt)}`,
+          };
+        }),
+    [hydratedVisibleCapsules, connectedAddress, openedCapsuleSet],
+  );
+
+  useEffect(() => {
+    if (!draft.file || !isPreviewableImage(draft.file.type, draft.file.name)) {
+      setDraftFilePreviewUrl("");
+      return;
+    }
+
+    const nextUrl = URL.createObjectURL(draft.file);
+    setDraftFilePreviewUrl(nextUrl);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [draft.file]);
 
   async function sealCapsule() {
     setLastError(null);
@@ -1269,6 +1319,59 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               </article>
             </div>
 
+            <section className="dashboard-workbench">
+              <article className="panel quick-actions-panel">
+                <div className="section-heading">
+                  <Sparkles size={21} />
+                  <div>
+                    <h2>Quick actions</h2>
+                    <p>Jump into the flows used most often.</p>
+                  </div>
+                </div>
+                <div className="quick-action-grid">
+                  <button onClick={() => setActivePage("create")}>
+                    <Plus size={16} />
+                    <span>Seal new capsule</span>
+                  </button>
+                  <button onClick={() => setActivePage("capsules")}>
+                    <Archive size={16} />
+                    <span>Review vault</span>
+                  </button>
+                  <button onClick={() => setActivePage("transactions")}>
+                    <History size={16} />
+                    <span>Audit receipts</span>
+                  </button>
+                  <button onClick={() => setActivePage("profile")}>
+                    <ShieldCheck size={16} />
+                    <span>Check runtime</span>
+                  </button>
+                </div>
+              </article>
+
+              <article className="panel activity-panel">
+                <div className="section-heading">
+                  <History size={21} />
+                  <div>
+                    <h2>Recent activity</h2>
+                    <p>{recentActivity.length ? "Latest Shelby capsule events" : "No activity for this wallet yet"}</p>
+                  </div>
+                </div>
+                <div className="activity-list">
+                  {recentActivity.length ? (
+                    recentActivity.map(({ capsule, label, detail, tone }) => (
+                      <button key={capsule.id} className={`activity-item ${tone}`} onClick={() => setSelectedCapsule(capsule)}>
+                        <span>{label}</span>
+                        <strong>{capsule.title}</strong>
+                        <small>{detail}</small>
+                      </button>
+                    ))
+                  ) : (
+                    <p>Yora will show sent, received, and released capsule events here once Shelby returns capsules for this wallet.</p>
+                  )}
+                </div>
+              </article>
+            </section>
+
             <section className="panel recent-panel dashboard-inbox-panel">
               <div className="section-heading">
                 <History size={22} />
@@ -1512,6 +1615,26 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                   <dd>AES-GCM 256</dd>
                 </div>
               </dl>
+              <div className="payload-preview">
+                <p className="eyebrow">Payload preview</p>
+                {mode === "file" && draftFilePreviewUrl ? (
+                  <img src={draftFilePreviewUrl} alt={`Preview of ${draft.file?.name ?? "selected file"}`} />
+                ) : (
+                  <div className="payload-preview-box">
+                    <strong>{mode === "file" ? "File capsule" : "Message capsule"}</strong>
+                    <span>{draftPayloadLabel}</span>
+                  </div>
+                )}
+              </div>
+              <div className="readiness-list">
+                <p className="eyebrow">Seal readiness</p>
+                {draftReadyChecks.map(([label, value]) => (
+                  <div key={label}>
+                    <span>{label}</span>
+                    <strong>{value}</strong>
+                  </div>
+                ))}
+              </div>
             </aside>
           </section>
         )}
@@ -1813,7 +1936,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
         )}
 
         {activePage === "transactions" && (
-          <section className="panel">
+          <section className="panel transactions-page">
             <div className="section-heading">
               <History size={22} />
               <div>
@@ -1834,6 +1957,23 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               {transactionCapsules.length ? (
                 transactionCapsules.map((rawCapsule) => {
                   const capsule = withLocalReceipt(rawCapsule);
+                  const registryDone =
+                    capsule.registryVerification?.status === "verified" ||
+                    capsule.registryVerification?.status === "released" ||
+                    Boolean(capsule.registryTxHash);
+                  const released =
+                    capsule.registryVerification?.status === "released" ||
+                    Boolean(capsule.releaseTxHash) ||
+                    openedCapsuleSet.has(capsule.id);
+                  const registryEnabled = isAptosRegistryEnabled(capsule.shelbyNetwork ?? selectedNetwork);
+                  const milestones = [
+                    ["Encrypted", "done"],
+                    ["Shelby stored", "done"],
+                    ["Registry", registryEnabled ? milestoneState(registryDone, true) : "pending"],
+                    ["Key escrow", isRemoteKeyReleaseEnabled() ? "done" : "pending"],
+                    ["Unsealed", milestoneState(released)],
+                    ["Release marker", milestoneState(Boolean(capsule.releaseTxHash), released && !capsule.releaseTxHash)],
+                  ] as Array<[string, "done" | "active" | "pending"]>;
                   return (
                     <article key={capsule.id} className="transaction-row">
                       <span className="status ready">
@@ -1872,6 +2012,14 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                         </span>
                       )}
                       <time>{new Date(capsule.createdAt).toLocaleString()}</time>
+                      <div className="transaction-progress" aria-label={`Capsule lifecycle for ${capsule.title}`}>
+                        {milestones.map(([label, state]) => (
+                          <span className={state} key={label}>
+                            {state === "done" ? <Check size={12} /> : <Clock3 size={12} />}
+                            {label}
+                          </span>
+                        ))}
+                      </div>
                     </article>
                   );
                 })
@@ -1991,6 +2139,39 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                   <dd>{activity}</dd>
                 </div>
               </dl>
+            </div>
+
+            <div className="panel security-panel">
+              <div className="section-heading">
+                <ShieldCheck size={22} />
+                <div>
+                  <h2>Security posture</h2>
+                  <p>How this wallet is protected in the current route</p>
+                </div>
+              </div>
+              <div className="security-checks">
+                <article className="ready">
+                  <Check size={15} />
+                  <div>
+                    <strong>Local encryption</strong>
+                    <p>Payload bytes are encrypted before Shelby storage.</p>
+                  </div>
+                </article>
+                <article className={isRemoteKeyReleaseEnabled() ? "ready" : "pending"}>
+                  {isRemoteKeyReleaseEnabled() ? <Check size={15} /> : <Clock3 size={15} />}
+                  <div>
+                    <strong>Remote key release</strong>
+                    <p>{isRemoteKeyReleaseEnabled() ? "Cross-browser unseal is available." : "Browser-only key vault is active."}</p>
+                  </div>
+                </article>
+                <article className={isAptosRegistryEnabled(selectedNetwork) ? "ready" : "pending"}>
+                  {isAptosRegistryEnabled(selectedNetwork) ? <Check size={15} /> : <Clock3 size={15} />}
+                  <div>
+                    <strong>Aptos registry</strong>
+                    <p>{isAptosRegistryEnabled(selectedNetwork) ? "Capsule receipts can be recorded on Aptos." : "Registry receipts are optional for this route."}</p>
+                  </div>
+                </article>
+              </div>
             </div>
           </section>
         )}

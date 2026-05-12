@@ -757,6 +757,107 @@ p { color: var(--muted); }
   color: var(--muted);
 }
 
+.dashboard-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  gap: 10px;
+}
+
+.quick-actions-panel,
+.activity-panel,
+.security-panel {
+  display: grid;
+  align-content: start;
+  gap: var(--space-lg);
+}
+
+.quick-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.quick-action-grid button,
+.activity-item {
+  border: 1px solid color-mix(in oklch, var(--line), transparent 12%);
+  background: color-mix(in oklch, var(--surface), transparent 6%);
+  color: var(--charcoal);
+  cursor: pointer;
+  transition:
+    transform 180ms var(--ease-out),
+    border-color 180ms var(--ease-out),
+    background 180ms var(--ease-out),
+    box-shadow 180ms var(--ease-out);
+}
+
+.quick-action-grid button {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-sm);
+  padding: 0 var(--space-lg);
+  border-radius: var(--radius);
+  font-weight: 760;
+  text-align: left;
+}
+
+.quick-action-grid button:hover,
+.activity-item:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in oklch, var(--rust), var(--line) 38%);
+  background: color-mix(in oklch, var(--amber), transparent 90%);
+  box-shadow: var(--shadow-soft);
+}
+
+.quick-action-grid svg {
+  flex: 0 0 auto;
+  color: var(--rust-dark);
+}
+
+.activity-list {
+  display: grid;
+  gap: 6px;
+}
+
+.activity-item {
+  width: 100%;
+  min-height: 50px;
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr) minmax(170px, 0.72fr);
+  align-items: center;
+  gap: var(--space-md);
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  text-align: left;
+}
+
+.activity-item span {
+  font-family: "Geist Mono", monospace;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.activity-item.received span,
+.activity-item.ready span { color: var(--green); }
+
+.activity-item.sent span { color: var(--rust-dark); }
+
+.activity-item strong,
+.activity-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-item small {
+  justify-self: end;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 /* ─── Panel ──────────────────────────────────────────────── */
 .panel { padding: clamp(16px, 1.4vw, 24px); }
 
@@ -824,6 +925,53 @@ p { color: var(--muted); }
 }
 
 .transaction-row:nth-child(2n) { animation-delay: 45ms; }
+
+.transactions-page {
+  overflow-x: auto;
+}
+
+.transaction-progress {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in oklch, var(--line), transparent 58%);
+}
+
+.transaction-progress span {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in oklch, var(--line), transparent 10%);
+  border-radius: 999px;
+  color: var(--muted);
+  font-family: "Geist Mono", monospace;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.transaction-progress .done {
+  border-color: color-mix(in oklch, var(--green), var(--line) 40%);
+  background: color-mix(in oklch, var(--green-soft), transparent 18%);
+  color: var(--green);
+}
+
+.transaction-progress .active {
+  border-color: color-mix(in oklch, var(--rust), var(--line) 44%);
+  background: color-mix(in oklch, var(--amber), transparent 62%);
+  color: var(--rust-dark);
+}
+
+.transaction-progress .pending {
+  background: color-mix(in oklch, var(--surface), transparent 18%);
+}
 
 .timeline-list article {
   grid-template-columns: minmax(80px, 0.4fr) minmax(0, 1.6fr) minmax(130px, 0.9fr);
@@ -1837,6 +1985,119 @@ textarea:focus {
 
 .create-aside p,
 .profile-card p { line-height: 1.62; }
+
+.payload-preview,
+.readiness-list {
+  display: grid;
+  gap: var(--space-sm);
+  padding-top: var(--space-md);
+  border-top: 1px solid color-mix(in oklch, var(--line), transparent 34%);
+}
+
+.payload-preview img {
+  width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+  border: 1px solid color-mix(in oklch, var(--line), transparent 10%);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.payload-preview-box {
+  min-height: 96px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  padding: var(--space-lg);
+  border: 1px solid color-mix(in oklch, var(--line), transparent 10%);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--amber), transparent 88%), transparent 70%),
+    color-mix(in oklch, var(--surface), transparent 8%);
+}
+
+.payload-preview-box strong {
+  color: var(--charcoal);
+}
+
+.payload-preview-box span {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
+.readiness-list div {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding-top: var(--space-sm);
+  border-top: 1px solid color-mix(in oklch, var(--line), transparent 48%);
+}
+
+.readiness-list div:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.readiness-list span {
+  color: var(--muted);
+  font-family: "Geist Mono", monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.readiness-list strong {
+  max-width: 64%;
+  overflow-wrap: anywhere;
+  color: var(--charcoal);
+  text-align: right;
+}
+
+.profile-page .security-panel {
+  grid-column: 1;
+}
+
+.security-checks {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--line), transparent 14%);
+  border-radius: var(--radius);
+}
+
+.security-checks article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-top: 1px solid color-mix(in oklch, var(--line), transparent 44%);
+  background: color-mix(in oklch, var(--surface), transparent 8%);
+}
+
+.security-checks article:first-child { border-top: 0; }
+
+.security-checks svg {
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.security-checks article.ready svg {
+  color: var(--green);
+}
+
+.security-checks article.pending svg {
+  color: var(--rust-dark);
+}
+
+.security-checks strong {
+  color: var(--charcoal);
+}
+
+.security-checks p {
+  margin-top: 4px;
+  color: var(--muted);
+}
 
 /* ─── Capsule cards ──────────────────────────────────────── */
 .cards {
@@ -3005,7 +3266,8 @@ dd {
 
   .profile-page .profile-card,
   .profile-page .profile-stats,
-  .profile-page .settings-panel {
+  .profile-page .settings-panel,
+  .profile-page .security-panel {
     grid-column: 1;
     grid-row: auto;
   }
@@ -3017,6 +3279,7 @@ dd {
   .flow-panel > div,
   .hero-panel,
   .dashboard-overview,
+  .dashboard-workbench,
   .capsule-receipt-panel,
   .landing-proof,
   .assurance,
@@ -3035,6 +3298,19 @@ dd {
   .transaction-row,
   .timeline-list article,
   .inbox-card { grid-template-columns: 1fr; gap: var(--space-sm); }
+
+  .transaction-progress {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .activity-item {
+    grid-template-columns: 86px minmax(0, 1fr);
+  }
+
+  .activity-item small {
+    grid-column: 2;
+    justify-self: start;
+  }
 
   .dashboard-status-card {
     grid-template-columns: minmax(180px, 0.4fr) minmax(0, 1fr);
@@ -3076,6 +3352,8 @@ dd {
   .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .profile-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .quick-action-grid { grid-template-columns: 1fr; }
+  .transaction-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
   .health-strip { display: none; }
 }
@@ -3198,6 +3476,25 @@ dd {
   .dashboard-metrics,
   .cards,
   .capsule-summary { grid-template-columns: 1fr; }
+
+  .activity-item,
+  .transaction-progress {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-item small {
+    grid-column: auto;
+  }
+
+  .readiness-list div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .readiness-list strong {
+    max-width: 100%;
+    text-align: left;
+  }
 
   .dashboard-hero-panel h2 {
     font-size: clamp(2.15rem, 12vw, 3.8rem);
