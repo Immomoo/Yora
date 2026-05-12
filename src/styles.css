@@ -930,6 +930,34 @@ p { color: var(--muted); }
   overflow-x: auto;
 }
 
+.transaction-status-toggle {
+  width: 100%;
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.transaction-status-toggle small {
+  color: var(--muted);
+  font-family: "Geist Mono", monospace;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.transaction-status-toggle:hover .status,
+.transaction-status-toggle.active .status {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--green-soft), transparent 8%);
+}
+
 .transaction-progress {
   grid-column: 1 / -1;
   display: grid;
@@ -2756,6 +2784,31 @@ dd {
 
 .empty-state p { max-width: 44ch; line-height: 1.62; }
 
+.state-warning {
+  justify-items: start;
+  place-items: stretch;
+  min-height: 124px;
+  border: 1px solid color-mix(in oklch, var(--rust), var(--line) 36%);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--rust), transparent 90%), transparent 70%),
+    color-mix(in oklch, var(--surface), transparent 4%);
+  text-align: left;
+}
+
+.state-warning svg {
+  color: var(--rust-dark);
+}
+
+.state-warning h3 {
+  max-width: none;
+  font-size: 1.1rem;
+}
+
+.state-warning .ghost-button {
+  justify-self: start;
+}
+
 /* ─── Assurance footer ───────────────────────────────────── */
 .assurance {
   position: relative;
@@ -2940,7 +2993,7 @@ dd {
 }
 
 .capsule-drawer {
-  width: min(440px, 100%);
+  width: min(560px, 100%);
   display: grid;
   align-content: start;
   gap: var(--space-lg);
@@ -2954,7 +3007,17 @@ dd {
   animation: drawerIn 320ms var(--ease-out);
 }
 
-.capsule-drawer h2 { font-size: clamp(1.9rem, 3.5vw, 3rem); line-height: 0.9; }
+.capsule-drawer h2 { font-size: clamp(2rem, 3.7vw, 3.35rem); line-height: 0.92; }
+
+.drawer-hero {
+  display: grid;
+  gap: 8px;
+}
+
+.drawer-hero p:not(.eyebrow) {
+  max-width: 58ch;
+  line-height: 1.58;
+}
 
 .drawer-close {
   justify-self: end;
@@ -2974,6 +3037,78 @@ dd {
 }
 
 .drawer-status { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+
+.drawer-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.drawer-summary-grid article {
+  min-height: 70px;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: var(--space-md);
+  border: 1px solid color-mix(in oklch, var(--line), transparent 18%);
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--surface), transparent 7%);
+}
+
+.drawer-summary-grid span {
+  color: var(--muted);
+  font-family: "Geist Mono", monospace;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.drawer-summary-grid strong {
+  overflow-wrap: anywhere;
+  color: var(--charcoal);
+  font-size: 0.94rem;
+}
+
+.drawer-rule-list {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--line), transparent 18%);
+  border-radius: var(--radius);
+}
+
+.drawer-rule-list article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-top: 1px solid color-mix(in oklch, var(--line), transparent 46%);
+  background: color-mix(in oklch, var(--surface), transparent 8%);
+}
+
+.drawer-rule-list article:first-child { border-top: 0; }
+
+.drawer-rule-list svg {
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.drawer-rule-list article.ready svg {
+  color: var(--green);
+}
+
+.drawer-rule-list article.pending svg {
+  color: var(--rust-dark);
+}
+
+.drawer-rule-list strong {
+  color: var(--charcoal);
+}
+
+.drawer-rule-list p {
+  margin-top: 4px;
+  line-height: 1.5;
+}
 
 .drawer-sections {
   display: grid;
@@ -3479,6 +3614,10 @@ dd {
 
   .activity-item,
   .transaction-progress {
+    grid-template-columns: 1fr;
+  }
+
+  .drawer-summary-grid {
     grid-template-columns: 1fr;
   }
 

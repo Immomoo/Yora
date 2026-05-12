@@ -313,6 +313,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
   } | null>(null);
   const [unsealIssue, setUnsealIssue] = useState<{ title: string; message: string } | null>(null);
   const [selectedCapsule, setSelectedCapsule] = useState<CapsuleManifest | null>(null);
+  const [expandedTransactionId, setExpandedTransactionId] = useState<string | null>(null);
   const [sealStep, setSealStep] = useState<SealStep>("idle");
   const [walletPickerOpen, setWalletPickerOpen] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -600,6 +601,22 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
         }),
     [hydratedVisibleCapsules, connectedAddress, openedCapsuleSet],
   );
+  const selectedCapsuleView = selectedCapsule ? withLocalReceipt(selectedCapsule) : null;
+  const selectedCapsuleLocked = selectedCapsuleView ? Date.now() < selectedCapsuleView.unlockAt : false;
+  const selectedCapsuleIsRecipient = selectedCapsuleView ? sameAddress(selectedCapsuleView.recipient, connectedAddress) : false;
+  const selectedCapsuleIsSender = selectedCapsuleView ? sameAddress(selectedCapsuleView.creator, connectedAddress) : false;
+  const selectedCapsuleReleased = selectedCapsuleView
+    ? selectedCapsuleView.registryVerification?.status === "released" ||
+      Boolean(selectedCapsuleView.releaseTxHash) ||
+      openedCapsuleSet.has(selectedCapsuleView.id)
+    : false;
+  const selectedCapsuleCanUnseal = Boolean(
+    selectedCapsuleView &&
+      selectedCapsuleIsRecipient &&
+      !selectedCapsuleLocked &&
+      openingCapsuleId !== selectedCapsuleView.id,
+  );
+  const selectedCapsuleDirection = selectedCapsuleIsRecipient ? "Received capsule" : selectedCapsuleIsSender ? "Sent capsule" : "Shared capsule";
 
   useEffect(() => {
     if (!draft.file || !isPreviewableImage(draft.file.type, draft.file.name)) {
@@ -941,6 +958,44 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
     setWalletPickerOpen(true);
   };
 
+  const refreshShelbyIndex = () => {
+    if (!connectedAddress) {
+      openWalletPicker();
+      return;
+    }
+
+    setCapsules([]);
+    setCapsuleScope(currentScope);
+    setIndexError(null);
+    setIsIndexLoading(true);
+    setIndexStatus(`Loading Shelby capsules for ${formatAddress(connectedAddress)} on ${networkConfig.shortLabel}...`);
+    void discoverShelbyCapsules({
+      client: shelbyClient,
+      account: connectedAddress,
+      network: selectedNetwork,
+    })
+      .then((indexedCapsules) => {
+        const hydratedCapsules = indexedCapsules.map((capsule) => {
+          const receipt = readCapsuleReceipts().find((item) => item.capsuleId === capsule.id);
+          return receipt ? { ...capsule, ...receipt } : capsule;
+        });
+        return attachRegistryVerifications(hydratedCapsules, selectedNetwork);
+      })
+      .then((verifiedCapsules) => {
+        setCapsuleScope(currentScope);
+        setCapsules(verifiedCapsules);
+        setIndexStatus(`Loaded ${capsuleCountLabel(verifiedCapsules.length)} from Shelby for ${formatAddress(connectedAddress)}.`);
+        setActivity(`Loaded ${capsuleCountLabel(verifiedCapsules.length)} from Shelby and checked Aptos registry status.`);
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : "Yora could not load capsules from Shelby.";
+        setIndexError(message);
+        setIndexStatus("Could not load Shelby capsules.");
+        setActivity(message);
+      })
+      .finally(() => setIsIndexLoading(false));
+  };
+
   const connectWallet = (walletName: string) => {
     try {
       wallet.connect(walletName);
@@ -1212,38 +1267,9 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 </div>
                 <button
                   className="small-button"
-                  onClick={() => {
-                    setCapsules([]);
-                    setCapsuleScope(currentScope);
-                    setIndexError(null);
-                    setIsIndexLoading(true);
-                    setIndexStatus(`Loading Shelby capsules for ${formatAddress(connectedAddress)} on ${networkConfig.shortLabel}...`);
-                    void discoverShelbyCapsules({
-                      client: shelbyClient,
-                      account: connectedAddress,
-                      network: selectedNetwork,
-                    })
-                      .then((indexedCapsules) => {
-                        const hydratedCapsules = indexedCapsules.map((capsule) => {
-                          const receipt = readCapsuleReceipts().find((item) => item.capsuleId === capsule.id);
-                          return receipt ? { ...capsule, ...receipt } : capsule;
-                        });
-                        return attachRegistryVerifications(hydratedCapsules, selectedNetwork);
-                      })
-                      .then((verifiedCapsules) => {
-                        setCapsuleScope(currentScope);
-                        setCapsules(verifiedCapsules);
-                        setIndexStatus(`Loaded ${capsuleCountLabel(verifiedCapsules.length)} from Shelby for ${formatAddress(connectedAddress)}.`);
-                        setActivity(`Loaded ${capsuleCountLabel(verifiedCapsules.length)} from Shelby and checked Aptos registry status.`);
-                      })
-                      .catch((error) => {
-                        setIndexError(error instanceof Error ? error.message : "Yora could not load capsules from Shelby.");
-                        setIndexStatus("Could not load Shelby capsules.");
-                      })
-                      .finally(() => setIsIndexLoading(false));
-                  }}
+                  onClick={refreshShelbyIndex}
                 >
-                  Refresh
+                  Retry Shelby index
                 </button>
               </section>
             )}
@@ -1769,6 +1795,18 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               )}
             </section>
 
+            {!isIndexLoading && indexError && (
+              <section className="empty-state slim state-warning" role="status">
+                <Server size={24} />
+                <h3>Shelby index needs another read.</h3>
+                <p>{indexError}</p>
+                <button className="ghost-button" type="button" onClick={refreshShelbyIndex}>
+                  <RefreshCw size={15} />
+                  Retry Shelby index
+                </button>
+              </section>
+            )}
+
             <div className="cards">
               {isIndexLoading && !visibleCapsules.length && (
                 Array.from({ length: 3 }).map((_, index) => (
@@ -1957,6 +1995,7 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               {transactionCapsules.length ? (
                 transactionCapsules.map((rawCapsule) => {
                   const capsule = withLocalReceipt(rawCapsule);
+                  const isExpanded = expandedTransactionId === capsule.id;
                   const registryDone =
                     capsule.registryVerification?.status === "verified" ||
                     capsule.registryVerification?.status === "released" ||
@@ -1976,10 +2015,18 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                   ] as Array<[string, "done" | "active" | "pending"]>;
                   return (
                     <article key={capsule.id} className="transaction-row">
-                      <span className="status ready">
-                        <Check size={13} />
-                        Sealed
-                      </span>
+                      <button
+                        className={`transaction-status-toggle ${isExpanded ? "active" : ""}`}
+                        type="button"
+                        aria-expanded={isExpanded}
+                        onClick={() => setExpandedTransactionId(isExpanded ? null : capsule.id)}
+                      >
+                        <span className="status ready">
+                          <Check size={13} />
+                          Sealed
+                        </span>
+                        <small>{isExpanded ? "Hide lifecycle" : "View lifecycle"}</small>
+                      </button>
                       <strong>{capsule.title}</strong>
                       <span className="receipt-cell">
                         <Server size={13} />
@@ -2012,14 +2059,16 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                         </span>
                       )}
                       <time>{new Date(capsule.createdAt).toLocaleString()}</time>
-                      <div className="transaction-progress" aria-label={`Capsule lifecycle for ${capsule.title}`}>
-                        {milestones.map(([label, state]) => (
-                          <span className={state} key={label}>
-                            {state === "done" ? <Check size={12} /> : <Clock3 size={12} />}
-                            {label}
-                          </span>
-                        ))}
-                      </div>
+                      {isExpanded && (
+                        <div className="transaction-progress" aria-label={`Capsule lifecycle for ${capsule.title}`}>
+                          {milestones.map(([label, state]) => (
+                            <span className={state} key={label}>
+                              {state === "done" ? <Check size={12} /> : <Clock3 size={12} />}
+                              {label}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </article>
                   );
                 })
@@ -2189,45 +2238,78 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
         </section>
       </section>
 
-      {selectedCapsule && (
+      {selectedCapsuleView && (
         <section className="drawer-backdrop" onClick={() => setSelectedCapsule(null)}>
-          <aside className="capsule-drawer" aria-label="Capsule details" onClick={(event) => event.stopPropagation()}>
+          <aside
+            className={`capsule-drawer ${selectedCapsuleIsRecipient ? "recipient-view" : "sender-view"}`}
+            aria-label="Capsule details"
+            onClick={(event) => event.stopPropagation()}
+          >
             <button className="drawer-close" onClick={() => setSelectedCapsule(null)} aria-label="Close capsule details">
               <X size={17} />
             </button>
-            <p className="eyebrow">Capsule details</p>
-            <h2>{selectedCapsule.title}</h2>
+            <div className="drawer-hero">
+              <p className="eyebrow">{selectedCapsuleDirection}</p>
+              <h2>{selectedCapsuleView.title}</h2>
+              <p>
+                {selectedCapsuleIsRecipient
+                  ? `Received from ${formatAddress(selectedCapsuleView.creator)} on ${formatShortDateTime(selectedCapsuleView.createdAt)}.`
+                  : `Sent to ${formatAddress(selectedCapsuleView.recipient)} on ${formatShortDateTime(selectedCapsuleView.createdAt)}.`}
+              </p>
+            </div>
             <div className="drawer-status">
-              <span className={`status ${Date.now() < selectedCapsule.unlockAt ? "locked" : "ready"}`}>
-                {Date.now() < selectedCapsule.unlockAt ? <Clock3 size={13} /> : <Check size={13} />}
-                {Date.now() < selectedCapsule.unlockAt ? "Locked" : "Unlockable"}
+              <span className={`status ${selectedCapsuleLocked ? "locked" : "ready"}`}>
+                {selectedCapsuleLocked ? <Clock3 size={13} /> : <Check size={13} />}
+                {selectedCapsuleLocked ? "Locked by time" : "Unlockable"}
+              </span>
+              <span className={`status ${selectedCapsuleIsRecipient ? "ready" : "warning"}`}>
+                {selectedCapsuleIsRecipient ? <CornerDownLeft size={13} /> : <CornerUpRight size={13} />}
+                {selectedCapsuleIsRecipient ? "Recipient view" : "Sender view"}
               </span>
               <span className="status shelby">
                 <Server size={13} />
-                {formatCapsuleStorage(selectedCapsule)}
+                {formatCapsuleStorage(selectedCapsuleView)}
               </span>
               <span
-                className={`status ${registryDisplayClass(withLocalReceipt(selectedCapsule))}`}
-                title={registryDisplayTitle(withLocalReceipt(selectedCapsule))}
+                className={`status ${registryDisplayClass(selectedCapsuleView)}`}
+                title={registryDisplayTitle(selectedCapsuleView)}
               >
                 <ShieldCheck size={13} />
-                {shortRegistryStatus(withLocalReceipt(selectedCapsule))}
+                {shortRegistryStatus(selectedCapsuleView)}
               </span>
+            </div>
+            <div className="drawer-summary-grid">
+              <article>
+                <span>Recipient</span>
+                <strong>{formatAddress(selectedCapsuleView.recipient)}</strong>
+              </article>
+              <article>
+                <span>Unlock</span>
+                <strong>{formatShortDateTime(selectedCapsuleView.unlockAt)}</strong>
+              </article>
+              <article>
+                <span>Payload</span>
+                <strong>{selectedCapsuleView.payloadKind} / {formatBytes(selectedCapsuleView.sizeBytes)}</strong>
+              </article>
+              <article>
+                <span>Release</span>
+                <strong>{selectedCapsuleReleased ? "Recorded" : "Pending"}</strong>
+              </article>
             </div>
             <div className="storage-receipt drawer-receipt">
               <div>
                 <span>Shelby storage receipt</span>
-                <strong>{storageReceiptId(selectedCapsule)}</strong>
-                <small>{formatCapsuleStorage(selectedCapsule)} / encrypted blob</small>
+                <strong>{storageReceiptId(selectedCapsuleView)}</strong>
+                <small>{formatCapsuleStorage(selectedCapsuleView)} / encrypted blob</small>
               </div>
-              <a className="receipt-action" href={shelbyExplorerBlobUrl(selectedCapsule)} target="_blank" rel="noreferrer">
+              <a className="receipt-action" href={shelbyExplorerBlobUrl(selectedCapsuleView)} target="_blank" rel="noreferrer">
                 <ExternalLink size={13} />
                 Open Shelby
               </a>
-              {withLocalReceipt(selectedCapsule).registryTxHash && (
+              {selectedCapsuleView.registryTxHash && (
                 <a
                   className="receipt-action"
-                  href={aptosExplorerTxUrl(withLocalReceipt(selectedCapsule).registryTxHash ?? "", selectedCapsule.shelbyNetwork ?? selectedNetwork)}
+                  href={aptosExplorerTxUrl(selectedCapsuleView.registryTxHash ?? "", selectedCapsuleView.shelbyNetwork ?? selectedNetwork)}
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -2236,21 +2318,44 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 </a>
               )}
             </div>
+            <div className="drawer-rule-list">
+              <article className={selectedCapsuleIsRecipient ? "ready" : "pending"}>
+                {selectedCapsuleIsRecipient ? <Check size={15} /> : <Clock3 size={15} />}
+                <div>
+                  <strong>Wallet gate</strong>
+                  <p>{selectedCapsuleIsRecipient ? "The active wallet matches the recipient address." : "Only the recipient wallet can unseal this capsule."}</p>
+                </div>
+              </article>
+              <article className={!selectedCapsuleLocked ? "ready" : "pending"}>
+                {!selectedCapsuleLocked ? <Check size={15} /> : <Clock3 size={15} />}
+                <div>
+                  <strong>Unlock window</strong>
+                  <p>{!selectedCapsuleLocked ? "The unlock timestamp has passed." : `Available after ${formatShortDateTime(selectedCapsuleView.unlockAt)}.`}</p>
+                </div>
+              </article>
+              <article className={selectedCapsuleReleased ? "ready" : "pending"}>
+                {selectedCapsuleReleased ? <Check size={15} /> : <Clock3 size={15} />}
+                <div>
+                  <strong>Release marker</strong>
+                  <p>{selectedCapsuleReleased ? "This capsule has already been opened or marked released." : "Yora will record release status after a successful unseal."}</p>
+                </div>
+              </article>
+            </div>
             <div className="drawer-sections">
               <section>
                 <h3>Access rules</h3>
                 <dl>
                   <div>
                     <dt>Recipient</dt>
-                    <dd>{selectedCapsule.recipient}</dd>
+                    <dd>{selectedCapsuleView.recipient}</dd>
                   </div>
                   <div>
                     <dt>Sender</dt>
-                    <dd>{formatAddress(selectedCapsule.creator)}</dd>
+                    <dd>{formatAddress(selectedCapsuleView.creator)}</dd>
                   </div>
                   <div>
                     <dt>Unlock time</dt>
-                    <dd>{new Date(selectedCapsule.unlockAt).toLocaleString()}</dd>
+                    <dd>{new Date(selectedCapsuleView.unlockAt).toLocaleString()}</dd>
                   </div>
                 </dl>
               </section>
@@ -2259,23 +2364,23 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 <dl>
                   <div>
                     <dt>Route</dt>
-                    <dd>{formatCapsuleStorage(selectedCapsule)}</dd>
+                    <dd>{formatCapsuleStorage(selectedCapsuleView)}</dd>
                   </div>
                   <div>
                     <dt>Blob name</dt>
-                    <dd>{selectedCapsule.blobName}</dd>
+                    <dd>{selectedCapsuleView.blobName}</dd>
                   </div>
                   <div>
                     <dt>Registry tx</dt>
-                    <dd>{registryTxLabel(withLocalReceipt(selectedCapsule))}</dd>
+                    <dd>{registryTxLabel(selectedCapsuleView)}</dd>
                   </div>
                   <div>
                     <dt>Registry status</dt>
-                    <dd>{registryStatusLabel(withLocalReceipt(selectedCapsule).registryVerification)}</dd>
+                    <dd>{registryStatusLabel(selectedCapsuleView.registryVerification)}</dd>
                   </div>
                   <div>
                     <dt>Release tx</dt>
-                    <dd>{withLocalReceipt(selectedCapsule).releaseTxHash ? shortDigest(withLocalReceipt(selectedCapsule).releaseTxHash ?? "") : "Not recorded"}</dd>
+                    <dd>{selectedCapsuleView.releaseTxHash ? shortDigest(selectedCapsuleView.releaseTxHash ?? "") : "Not recorded"}</dd>
                   </div>
                 </dl>
               </section>
@@ -2284,26 +2389,26 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 <dl>
                   <div>
                     <dt>Type</dt>
-                    <dd>{selectedCapsule.payloadKind} / {formatBytes(selectedCapsule.sizeBytes)}</dd>
+                    <dd>{selectedCapsuleView.payloadKind} / {formatBytes(selectedCapsuleView.sizeBytes)}</dd>
                   </div>
                   <div>
                     <dt>Digest</dt>
-                    <dd>{selectedCapsule.ciphertextDigest}</dd>
+                    <dd>{selectedCapsuleView.ciphertextDigest}</dd>
                   </div>
                 </dl>
               </section>
             </div>
             <button
               className="primary"
-              onClick={() => void unsealCapsule(selectedCapsule)}
-              disabled={
-                !sameAddress(selectedCapsule.recipient, connectedAddress) ||
-                Date.now() < selectedCapsule.unlockAt ||
-                openingCapsuleId === selectedCapsule.id
-              }
+              onClick={() => void unsealCapsule(selectedCapsuleView)}
+              disabled={!selectedCapsuleCanUnseal}
             >
               <CalendarClock size={16} />
-              {openingCapsuleId === selectedCapsule.id ? "Awaiting wallet approval..." : "Unseal capsule"}
+              {openingCapsuleId === selectedCapsuleView.id
+                ? "Awaiting wallet approval..."
+                : selectedCapsuleIsRecipient
+                  ? "Unseal capsule"
+                  : "Recipient wallet required"}
             </button>
           </aside>
         </section>
