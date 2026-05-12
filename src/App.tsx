@@ -1077,8 +1077,8 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               </section>
             )}
             {wallet.connected && (isIndexLoading || indexError) && (
-              <section className="wallet-state">
-                {isIndexLoading ? <RefreshCw size={20} /> : <Server size={20} />}
+              <section className={`wallet-state ${isIndexLoading ? "loading-state" : ""}`}>
+                {isIndexLoading ? <RefreshCw className="loading-icon" size={20} /> : <Server size={20} />}
                 <div>
                   <strong>{isIndexLoading ? "Loading Shelby capsules..." : "Shelby capsules are unavailable."}</strong>
                   <p>
@@ -1205,7 +1205,25 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 </div>
               </div>
               <div className="dashboard-inbox-list">
-                {receivedInbox.length ? (
+                {isIndexLoading ? (
+                  Array.from({ length: 3 }).map((_, index) => (
+                    <article className="inbox-card inbox-skeleton" aria-hidden="true" key={`inbox-skeleton-${index}`}>
+                      <div className="skeleton-pill" />
+                      <div className="inbox-copy">
+                        <span className="skeleton-line wide" />
+                        <span className="skeleton-line medium" />
+                      </div>
+                      <div className="skeleton-stack">
+                        <span className="skeleton-line short" />
+                        <span className="skeleton-line medium" />
+                      </div>
+                      <div className="skeleton-actions">
+                        <span />
+                        <span />
+                      </div>
+                    </article>
+                  ))
+                ) : receivedInbox.length ? (
                   receivedInbox.map((capsule) => {
                     const locked = Date.now() < capsule.unlockAt;
                     const opening = openingCapsuleId === capsule.id;
@@ -1515,7 +1533,37 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
             )}
 
             <div className="cards">
-              {!visibleCapsules.length && (
+              {isIndexLoading && !visibleCapsules.length && (
+                Array.from({ length: 3 }).map((_, index) => (
+                  <article className="capsule-card capsule-skeleton" aria-hidden="true" key={`capsule-skeleton-${index}`}>
+                    <div className="card-top">
+                      <span className="skeleton-pill" />
+                      <span className="skeleton-pill muted" />
+                    </div>
+                    <span className="skeleton-line title" />
+                    <span className="skeleton-line medium" />
+                    <div className="skeleton-list">
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                    <div className="storage-receipt skeleton-receipt">
+                      <div>
+                        <span className="skeleton-line short" />
+                        <span className="skeleton-line wide" />
+                        <span className="skeleton-line medium" />
+                      </div>
+                      <span className="skeleton-button" />
+                    </div>
+                    <div className="capsule-actions skeleton-actions">
+                      <span />
+                      <span />
+                    </div>
+                  </article>
+                ))
+              )}
+              {!isIndexLoading && !visibleCapsules.length && (
                 <div className="capsule-empty-shell">
                   <div className="empty-state capsule-empty">
                     <div className="empty-orb">

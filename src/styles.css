@@ -507,6 +507,20 @@ p { color: var(--muted); }
 .wallet-state strong { color: var(--charcoal); }
 .wallet-state p { margin-top: 4px; line-height: 1.5; }
 
+.loading-state {
+  border-color: color-mix(in oklch, var(--amber), var(--line) 36%);
+  background:
+    linear-gradient(90deg, transparent, color-mix(in oklch, var(--amber), transparent 88%), transparent),
+    color-mix(in oklch, var(--surface) 92%, transparent);
+  background-size: 220% 100%, auto;
+  animation: appReveal 420ms var(--ease-out) both, loadingWash 2.8s var(--ease-out) infinite;
+}
+
+.loading-icon {
+  color: var(--rust-dark);
+  animation: turn 1.4s linear infinite;
+}
+
 /* ─── Hero panel (dashboard) ─────────────────────────────── */
 .hero-panel {
   min-height: 240px;
@@ -961,6 +975,80 @@ p { color: var(--muted); }
 
 .inbox-actions .secondary {
   width: auto;
+}
+
+.inbox-skeleton {
+  pointer-events: none;
+}
+
+.skeleton-pill,
+.skeleton-line,
+.skeleton-list span,
+.skeleton-actions span,
+.skeleton-button {
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, transparent, oklch(98% 0.017 84 / 0.72), transparent),
+    color-mix(in oklch, var(--line-soft), var(--surface) 58%);
+  background-size: 240% 100%, auto;
+  animation: skeletonSweep 1.7s var(--ease-out) infinite;
+}
+
+.skeleton-pill {
+  width: 92px;
+  height: 28px;
+}
+
+.skeleton-pill.muted {
+  width: 78px;
+  opacity: 0.78;
+}
+
+.skeleton-line {
+  width: 100%;
+  height: 12px;
+}
+
+.skeleton-line.title {
+  width: 62%;
+  height: 24px;
+  border-radius: 6px;
+}
+
+.skeleton-line.wide { width: 92%; }
+.skeleton-line.medium { width: 64%; }
+.skeleton-line.short { width: 38%; }
+
+.skeleton-stack,
+.skeleton-list {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.skeleton-list {
+  min-height: 122px;
+}
+
+.skeleton-list span {
+  height: 14px;
+  border-radius: 6px;
+}
+
+.skeleton-list span:nth-child(2) { width: 86%; }
+.skeleton-list span:nth-child(3) { width: 78%; }
+.skeleton-list span:nth-child(4) { width: 66%; }
+
+.skeleton-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.skeleton-actions span,
+.skeleton-button {
+  min-height: 38px;
 }
 
 .capsule-receipt-panel {
@@ -1544,11 +1632,13 @@ dt,
 /* Seal progress */
 .seal-progress {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 6px;
 }
 
 .seal-step {
+  position: relative;
+  overflow: hidden;
   min-height: 34px;
   display: inline-flex;
   align-items: center;
@@ -1572,7 +1662,19 @@ dt,
   box-shadow: 0 0 0 3px oklch(72% 0.102 82 / 0.12);
 }
 
+.seal-step.active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, oklch(98% 0.02 84 / 0.72), transparent);
+  transform: translateX(-120%);
+  animation: progressGlint 1.6s var(--ease-out) infinite;
+  pointer-events: none;
+}
+
 .seal-step.active svg {
+  position: relative;
+  z-index: 1;
   animation: sealPulse 900ms var(--ease-out) infinite;
 }
 
@@ -1580,6 +1682,10 @@ dt,
   border-color: color-mix(in oklch, var(--green), var(--line) 45%);
   background: color-mix(in oklch, var(--green-soft), var(--surface) 72%);
   color: var(--green);
+}
+
+.seal-step.done svg {
+  animation: sealDone 360ms var(--ease-out) both;
 }
 
 label {
@@ -2055,6 +2161,18 @@ textarea:focus {
 }
 
 .capsule-card:hover .direction-badge { transform: translateY(-1px); }
+
+.capsule-skeleton {
+  pointer-events: none;
+}
+
+.capsule-skeleton .card-top {
+  min-height: 30px;
+}
+
+.skeleton-receipt {
+  border-color: color-mix(in oklch, var(--green), var(--line) 58%);
+}
 
 .direction-badge.received {
   color: var(--green);
@@ -2580,6 +2698,7 @@ dd {
   border: 1px solid var(--line);
   border-radius: calc(var(--radius) - 4px);
   background: color-mix(in oklch, var(--paper), var(--surface) 50%);
+  animation: contentReveal 360ms var(--ease-out) both 90ms;
 }
 
 .opened-content p {
@@ -2592,6 +2711,7 @@ dd {
 .unseal-receipt {
   padding-top: var(--space-md);
   border-top: 1px solid color-mix(in oklch, var(--line), transparent 25%);
+  animation: contentReveal 360ms var(--ease-out) both 140ms;
 }
 
 .file-preview img,
@@ -2603,6 +2723,7 @@ dd {
   border-radius: calc(var(--radius) - 6px);
   background: var(--paper);
   object-fit: contain;
+  animation: previewSettle 420ms var(--ease-out) both 160ms;
 }
 
 .file-preview iframe {
@@ -2646,6 +2767,16 @@ dd {
   50%      { transform: scale(1.18); opacity: 0.72; }
 }
 
+@keyframes loadingWash {
+  from { background-position: 180% 0, 0 0; }
+  to   { background-position: -60% 0, 0 0; }
+}
+
+@keyframes skeletonSweep {
+  from { background-position: 180% 0, 0 0; }
+  to   { background-position: -60% 0, 0 0; }
+}
+
 @keyframes navIconPop {
   from { transform: scale(0.86); opacity: 0.66; }
 }
@@ -2654,12 +2785,28 @@ dd {
   50% { transform: scale(1.14); opacity: 0.72; }
 }
 
+@keyframes sealDone {
+  from { transform: scale(0.78); opacity: 0.6; }
+}
+
+@keyframes progressGlint {
+  to { transform: translateX(120%); }
+}
+
 @keyframes drawerIn {
   from { opacity: 0; transform: translateX(22px); }
 }
 
 @keyframes openedIn {
   from { opacity: 0; transform: translate3d(0, 18px, 0) scale(0.985); }
+}
+
+@keyframes contentReveal {
+  from { opacity: 0; transform: translateY(8px); }
+}
+
+@keyframes previewSettle {
+  from { opacity: 0; transform: scale(0.992); }
 }
 
 @keyframes markPulse {
