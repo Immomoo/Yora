@@ -1929,6 +1929,98 @@ textarea:focus {
   font-size: 1.42rem;
 }
 
+.capsule-controls {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.capsule-search {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.capsule-search svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  z-index: 1;
+  color: var(--quiet);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.capsule-search input {
+  min-height: 42px;
+  padding-left: 40px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--surface) 92%, transparent);
+}
+
+.capsule-filter-strip {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 4px;
+  border: 1px solid color-mix(in oklch, var(--line), transparent 20%);
+  border-radius: 999px;
+  background: oklch(96% 0.016 84 / 0.62);
+  scrollbar-width: none;
+}
+
+.capsule-filter-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.capsule-filter-strip button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.capsule-filter-strip button strong {
+  min-width: 22px;
+  min-height: 20px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--line-soft), var(--surface) 46%);
+  color: var(--quiet);
+  font-family: "Geist Mono", monospace;
+  font-size: 0.62rem;
+}
+
+.capsule-filter-strip button.active {
+  border-color: color-mix(in oklch, var(--rust), var(--line) 42%);
+  background: var(--charcoal);
+  color: var(--paper);
+  box-shadow: 0 8px 18px oklch(22% 0.025 70 / 0.1);
+}
+
+.capsule-filter-strip button.active strong {
+  background: color-mix(in oklch, var(--gold), var(--charcoal) 54%);
+  color: var(--paper);
+}
+
+.clear-filters {
+  min-height: 42px;
+  white-space: nowrap;
+}
+
 .capsule-empty-shell {
   grid-column: 1 / -1;
   display: block;
@@ -2964,6 +3056,14 @@ dd {
 
   .receipt-actions {
     justify-content: start;
+  }
+
+  .capsule-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .clear-filters {
+    justify-self: start;
   }
 }
 

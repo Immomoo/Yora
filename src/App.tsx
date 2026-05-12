@@ -21,6 +21,7 @@ import {
   ExternalLink,
   Plus,
   RefreshCw,
+  Search,
   Send,
   Server,
   Settings,
@@ -65,6 +66,7 @@ const CAPSULE_RECEIPTS_KEY = "yora:capsule-receipts:v1";
 
 type Page = "landing" | "dashboard" | "create" | "capsules" | "transactions" | "profile";
 type SealStep = "idle" | "encrypting" | "approving" | "uploading" | "registry" | "escrow" | "sealed" | "error";
+type CapsuleFilter = "all" | "received" | "sent" | "unlockable" | "locked" | "released" | "message" | "file";
 
 interface CapsuleReceipt {
   capsuleId: string;
@@ -317,6 +319,8 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
   const [indexError, setIndexError] = useState<string | null>(null);
   const [capsuleScope, setCapsuleScope] = useState("");
   const [indexStatus, setIndexStatus] = useState("Shelby capsule index ready.");
+  const [capsuleFilter, setCapsuleFilter] = useState<CapsuleFilter>("all");
+  const [capsuleSearch, setCapsuleSearch] = useState("");
 
   const connectedAddress = normalizedAddress(wallet.account?.address);
   const currentScope = `${selectedNetwork}:${comparableAddress(connectedAddress)}`;
@@ -361,6 +365,75 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
     Boolean(walletNetworkName) &&
     !isWalletOnSelectedNetwork(walletNetworkName, selectedNetwork);
   const capsuleReceiptMap = useMemo(() => new Map(capsuleReceipts.map((receipt) => [receipt.capsuleId, receipt])), [capsuleReceipts]);
+  const hydratedVisibleCapsules = useMemo(
+    () => visibleCapsules.map((capsule) => withLocalReceipt(capsule)),
+    [visibleCapsules, capsuleReceiptMap],
+  );
+  const capsuleFilterOptions = useMemo(() => {
+    const now = Date.now();
+    const isReleased = (capsule: CapsuleManifest) =>
+      capsule.registryVerification?.status === "released" ||
+      Boolean(capsule.releaseTxHash) ||
+      capsule.status === "opened" ||
+      openedCapsuleSet.has(capsule.id);
+
+    return [
+      ["all", "All", hydratedVisibleCapsules.length],
+      ["received", "Received", hydratedVisibleCapsules.filter((capsule) => sameAddress(capsule.recipient, connectedAddress)).length],
+      ["sent", "Sent", hydratedVisibleCapsules.filter((capsule) => sameAddress(capsule.creator, connectedAddress)).length],
+      ["unlockable", "Unlockable", hydratedVisibleCapsules.filter((capsule) => sameAddress(capsule.recipient, connectedAddress) && now >= capsule.unlockAt).length],
+      ["locked", "Locked", hydratedVisibleCapsules.filter((capsule) => now < capsule.unlockAt).length],
+      ["released", "Released", hydratedVisibleCapsules.filter(isReleased).length],
+      ["message", "Message", hydratedVisibleCapsules.filter((capsule) => capsule.payloadKind === "message").length],
+      ["file", "File", hydratedVisibleCapsules.filter((capsule) => capsule.payloadKind === "file").length],
+    ] as Array<[CapsuleFilter, string, number]>;
+  }, [hydratedVisibleCapsules, connectedAddress, openedCapsuleSet]);
+  const filteredCapsules = useMemo(() => {
+    const now = Date.now();
+    const query = capsuleSearch.trim().toLowerCase();
+
+    return hydratedVisibleCapsules.filter((capsule) => {
+      const isRecipient = sameAddress(capsule.recipient, connectedAddress);
+      const isCreator = sameAddress(capsule.creator, connectedAddress);
+      const isReleased =
+        capsule.registryVerification?.status === "released" ||
+        Boolean(capsule.releaseTxHash) ||
+        capsule.status === "opened" ||
+        openedCapsuleSet.has(capsule.id);
+      const matchesFilter =
+        capsuleFilter === "all" ||
+        (capsuleFilter === "received" && isRecipient) ||
+        (capsuleFilter === "sent" && isCreator) ||
+        (capsuleFilter === "unlockable" && isRecipient && now >= capsule.unlockAt) ||
+        (capsuleFilter === "locked" && now < capsule.unlockAt) ||
+        (capsuleFilter === "released" && isReleased) ||
+        (capsuleFilter === "message" && capsule.payloadKind === "message") ||
+        (capsuleFilter === "file" && capsule.payloadKind === "file");
+
+      if (!matchesFilter) return false;
+      if (!query) return true;
+
+      const searchText = [
+        capsule.title,
+        capsule.id,
+        capsule.creator,
+        capsule.recipient,
+        capsule.blobName,
+        capsule.ciphertextDigest,
+        capsule.registryTxHash,
+        capsule.releaseTxHash,
+        storageReceiptId(capsule),
+        formatCapsuleStorage(capsule),
+        shortRegistryStatus(capsule),
+        capsule.payloadKind,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchText.includes(query);
+    });
+  }, [hydratedVisibleCapsules, capsuleFilter, capsuleSearch, connectedAddress, openedCapsuleSet]);
 
   const uploadBlobs = useUploadBlobs({
     client: shelbyClient,
@@ -1450,7 +1523,11 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                 <Archive size={22} />
                 <div>
                   <h2>Capsule vault</h2>
-                  <p>{visibleCapsules.length ? `${capsuleCountLabel(visibleCapsules.length)} for this wallet` : "No capsules for this wallet"}</p>
+                  <p>
+                    {visibleCapsules.length
+                      ? `${capsuleCountLabel(filteredCapsules.length)} shown from ${capsuleCountLabel(visibleCapsules.length)}`
+                      : "No capsules for this wallet"}
+                  </p>
                 </div>
               </div>
               <button className="primary" onClick={() => setActivePage("create")}>
@@ -1532,6 +1609,43 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
               </section>
             )}
 
+            <section className="capsule-controls" aria-label="Capsule search and filters">
+              <label className="capsule-search">
+                <Search size={17} />
+                <input
+                  value={capsuleSearch}
+                  onChange={(event) => setCapsuleSearch(event.target.value)}
+                  placeholder="Search title, address, digest, receipt..."
+                  aria-label="Search capsules"
+                />
+              </label>
+              <div className="capsule-filter-strip" aria-label="Filter capsules">
+                {capsuleFilterOptions.map(([filter, label, count]) => (
+                  <button
+                    type="button"
+                    className={capsuleFilter === filter ? "active" : ""}
+                    onClick={() => setCapsuleFilter(filter)}
+                    key={filter}
+                  >
+                    <span>{label}</span>
+                    <strong>{count}</strong>
+                  </button>
+                ))}
+              </div>
+              {(capsuleFilter !== "all" || capsuleSearch.trim()) && (
+                <button
+                  className="ghost-button clear-filters"
+                  type="button"
+                  onClick={() => {
+                    setCapsuleFilter("all");
+                    setCapsuleSearch("");
+                  }}
+                >
+                  Clear filters
+                </button>
+              )}
+            </section>
+
             <div className="cards">
               {isIndexLoading && !visibleCapsules.length && (
                 Array.from({ length: 3 }).map((_, index) => (
@@ -1581,8 +1695,30 @@ export default function App({ selectedNetwork, onNetworkChange }: AppProps) {
                   </div>
                 </div>
               )}
-              {visibleCapsules.map((rawCapsule) => {
-                const capsule = withLocalReceipt(rawCapsule);
+              {!isIndexLoading && visibleCapsules.length > 0 && !filteredCapsules.length && (
+                <div className="capsule-empty-shell">
+                  <div className="empty-state capsule-empty">
+                    <div className="empty-orb">
+                      <Search size={28} />
+                    </div>
+                    <div>
+                      <p className="eyebrow">No matches</p>
+                      <h3>No capsules match this view.</h3>
+                      <p>Adjust the filter or search term to view more capsules from this wallet.</p>
+                    </div>
+                    <button
+                      className="primary"
+                      onClick={() => {
+                        setCapsuleFilter("all");
+                        setCapsuleSearch("");
+                      }}
+                    >
+                      Clear filters
+                    </button>
+                  </div>
+                </div>
+              )}
+              {filteredCapsules.map((capsule) => {
                 const isRecipient = sameAddress(capsule.recipient, connectedAddress);
                 const isCreator = sameAddress(capsule.creator, connectedAddress);
                 const locked = Date.now() < capsule.unlockAt;
